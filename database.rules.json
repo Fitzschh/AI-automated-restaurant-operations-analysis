@@ -1,0 +1,22 @@
+{
+    "rules": {
+        "branch1": {
+            ".read": "auth != null",
+            ".write": "auth != null && (auth.token.email === 'pamaybay88@gmail.com' || auth.token.email === 'fitzhofer@gmail.com')"
+        },
+        "branch2": {
+            ".read": "auth != null",
+            ".write": "auth != null && (auth.token.email === 'dummy@dummy.com' || auth.token.email === 'fitzhofer@gmail.com')"
+        },
+        "users": {
+            ".read": "auth != null && auth.token.email === 'fitzhofer@gmail.com'",
+            ".indexOn": [
+                "email"
+            ],
+            "$uid": {
+                ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'fitzhofer@gmail.com')",
+                ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'fitzhofer@gmail.com')"
+            }
+        }
+    }
+}
