@@ -97,3 +97,39 @@
 .chartContainer:hover .tooltip.visible {
   opacity: 1;
 }
+
+.tooltipLabel {
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.axisLabels {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  line-height: 1.1;
+}
+
+.axisLabels span {
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.axisLabels span:first-child {
+  text-align: left;
+}
+
+.axisLabels span:last-child {
+  text-align: right;
+}
+
+.axisLabelHidden {
+  visibility: hidden;
+}

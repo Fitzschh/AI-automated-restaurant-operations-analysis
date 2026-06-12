@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { useAnalyticsProcessor } from './hooks/useAnalyticsProcessor';
 import LoginPage from './pages/LoginPage';
 import MenuPage from './pages/MenuPage';
 import AdminHomePage from './pages/AdminHomePage';
@@ -51,7 +50,6 @@ function ProtectedRoute({ children, adminOnly = false, branchId: staticBranchId 
 
 export default function App() {
   const location = useLocation();
-  const { user } = useAuth();
 
   return (
     <div className="page-transition-wrapper">

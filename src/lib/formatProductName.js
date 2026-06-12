@@ -23,24 +23,18 @@ export function formatProductName(raw) {
   if (!raw || typeof raw !== 'string') return '';
 
   // Strip emojis first
-  let cleaned = raw.replace(EMOJI_REGEX, '').trim();
+  const cleaned = raw.replace(EMOJI_REGEX, '').replace(/_/g, ' ').trim();
 
-  // If name contains underscores, treat as database key
-  if (cleaned.includes('_')) {
-    cleaned = cleaned
-      .split('_')
-      .map(word => {
-        if (!word) return '';
-        // Keep numeric tokens as-is (e.g., "16oz")
-        if (/^\d/.test(word)) return word;
-        // Capitalize first letter of each word
-        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-      })
-      .filter(Boolean)
-      .join(' ');
-  }
-
-  return cleaned;
+  return cleaned
+    .split(/(\s+|-|\/)/)
+    .map(part => {
+      if (!part || /^\s+$/.test(part) || part === '-' || part === '/') return part;
+      if (/^\d/.test(part)) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**

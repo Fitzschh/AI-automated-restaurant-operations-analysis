@@ -41,9 +41,17 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--color-accent), #1abc9c);
-  color: #fff;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  overflow: hidden;
   flex-shrink: 0;
+}
+
+.brandLogoMark {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  display: block;
 }
 
 .brandName {
@@ -292,6 +300,15 @@
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--color-text-primary);
+}
+
+.mobileBrandIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--color-border);
 }
 
 /* ── Overlay (mobile) ─────────────────────────── */

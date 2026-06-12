@@ -25,17 +25,20 @@
   max-width: 420px;
   background: #2d2d2d;
   border-radius: 8px;
-  padding: 60px 48px;
+  padding: 40px 48px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 /* Logo Section */
 .logoSection {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .brandName {
@@ -105,46 +108,44 @@
 
 .passwordInput {
   flex: 1;
-  padding-right: 40px;
+  padding-right: 44px;
 }
 
 .passwordToggle {
   position: absolute;
-  right: 12px;
+  right: 10px;
   background: none;
   border: none;
   color: #c4a574;
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  transition: color 0.2s;
-}
-
-.passwordToggle::after {
-  content: '';
-  position: absolute;
-  width: 130%;
-  height: 2px;
-  background: #c4a574;
-  transform: rotate(45deg);
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-}
-
-.passwordToggleVisible::after {
-  opacity: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s, opacity 0.2s;
 }
 
 .passwordToggle:hover {
   color: #d4b584;
+  background: rgba(196, 165, 116, 0.08);
+}
+
+.passwordToggle:focus-visible {
+  outline: 2px solid rgba(196, 165, 116, 0.6);
+  outline-offset: 2px;
 }
 
 .passwordToggleVisible {
-  opacity: 0.5;
+  color: #d4b584;
+}
+
+.passwordToggleIcon {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .formInput:disabled {
@@ -261,12 +262,101 @@
 }
 
 .footerLink {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
   color: #c4a574;
+  font: inherit;
   text-decoration: none;
   transition: color 0.2s;
+  cursor: pointer;
 }
 
 .footerLink:hover {
   color: #d4b584;
   text-decoration: underline;
+}
+
+.poweredBy {
+  margin-top: -14px;
+  color: #9d9d9d;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+
+.infoModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.infoModal {
+  width: min(520px, 100%);
+  max-height: min(680px, 90vh);
+  overflow: auto;
+  background: #2d2d2d;
+  border: 1px solid #5a5a5a;
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  color: #f5e6d3;
+}
+
+.infoModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #4a4a4a;
+}
+
+.infoModalHeader h2 {
+  margin: 0;
+  color: #c4a574;
+  font-size: 20px;
+}
+
+.infoModalClose {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #5a5a5a;
+  border-radius: 4px;
+  background: #3a3a3a;
+  color: #c4a574;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.infoModalClose:hover {
+  background: #454545;
+  color: #d4b584;
+}
+
+.infoModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+}
+
+.infoModalSection h3 {
+  margin: 0 0 6px 0;
+  color: #d4b584;
+  font-size: 15px;
+}
+
+.infoModalSection p {
+  margin: 0;
+  color: #e6d6bd;
+  font-size: 14px;
+  line-height: 1.55;
 }

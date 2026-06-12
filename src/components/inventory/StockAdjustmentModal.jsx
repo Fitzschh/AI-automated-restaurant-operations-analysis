@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { 
   adjustStock, 
   updateInventoryItem, 
-  getInventoryHistory 
+  getInventoryHistory,
+  normalizeStockValue,
 } from '../../lib/inventoryApi';
 import { formatProductName } from '../../lib/formatProductName';
 import { 
@@ -16,6 +17,7 @@ export default function StockAdjustmentModal({ isOpen, onClose, item, itemId, br
   
   // Custom adjustment state
   const [customAmount, setCustomAmount] = useState('');
+  const [exactStock, setExactStock] = useState('');
   const [note, setNote] = useState('');
   
   // Settings state
@@ -29,6 +31,7 @@ export default function StockAdjustmentModal({ isOpen, onClose, item, itemId, br
       setCriticalLevel(item.criticalLevel || 5);
       setUnit(item.unit || 'units');
       setCustomAmount('');
+      setExactStock('');
       setNote('');
       loadHistory();
     }
@@ -52,7 +55,7 @@ export default function StockAdjustmentModal({ isOpen, onClose, item, itemId, br
 
   if (!isOpen || !item) return null;
 
-  const currentStock = item.currentStock || 0;
+  const currentStock = normalizeStockValue(item.stock !== undefined ? item.stock : item.currentStock);
 
   const handleQuickAdjust = async (amount) => {
     setLoading(true);
@@ -98,6 +101,34 @@ export default function StockAdjustmentModal({ isOpen, onClose, item, itemId, br
       loadHistory();
     } catch (err) {
       console.error("Adjustment failed", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetStock = async (e) => {
+    e.preventDefault();
+    const parsedStock = parseInt(exactStock, 10);
+    if (isNaN(parsedStock)) return;
+    const newStock = normalizeStockValue(parsedStock);
+
+    setLoading(true);
+    try {
+      const adjustment = newStock - currentStock;
+      await adjustStock(
+        branchId, 
+        itemId, 
+        adjustment, 
+        currentStock, 
+        newStock, 
+        userId, 
+        note || `Set exact stock to ${newStock}`
+      );
+      setExactStock('');
+      setNote('');
+      loadHistory();
+    } catch (err) {
+      console.error("Set stock failed", err);
     } finally {
       setLoading(false);
     }
@@ -185,6 +216,25 @@ export default function StockAdjustmentModal({ isOpen, onClose, item, itemId, br
               />
               <button type="submit" className={styles.primaryBtn} disabled={loading || !customAmount} style={{ padding: '8px 16px' }}>
                 Apply
+              </button>
+            </form>
+          </div>
+
+          {/* Set Exact Stock */}
+          <div className={styles.adjustmentSection}>
+            <span className={styles.sectionLabel}>Set Stock Level</span>
+            <form onSubmit={handleSetStock} style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="number"
+                min="0"
+                placeholder="Exact stock value"
+                className={styles.numberInput}
+                style={{ flex: 1 }}
+                value={exactStock}
+                onChange={(e) => setExactStock(e.target.value)}
+              />
+              <button type="submit" className={styles.primaryBtn} disabled={loading || exactStock === ''} style={{ padding: '8px 16px' }}>
+                Set
               </button>
             </form>
           </div>

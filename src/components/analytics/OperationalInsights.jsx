@@ -1,4 +1,4 @@
-import { BrainIcon, TrendUpIcon, InventoryIcon, AlertIcon } from './AnalyticsIcons';
+import { BrainIcon } from './AnalyticsIcons';
 import styles from './AnalyticsSections.module.css';
 
 export default function OperationalInsights() {
@@ -7,53 +7,49 @@ export default function OperationalInsights() {
       <div className={styles.sectionHeader}>
         <div>
           <h2 className={styles.sectionTitle}>Operational Insights</h2>
-          <p className={styles.sectionSubtitle}>AI-powered recommendations (Preview)</p>
+          <p className={styles.sectionSubtitle}>AI-powered recommendations & insights</p>
         </div>
       </div>
 
-      <div className={styles.panelGrid} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-        
-        <div className={styles.panel} style={{ borderTop: '3px solid var(--color-success)', padding: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <TrendUpIcon size={18} color="var(--color-success)" />
-            <h3 className={styles.panelTitle} style={{ fontSize: '0.95rem' }}>Increasing Demand</h3>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            Analyzing recent order velocity... AI connection required to identify trending products.
+      <div 
+        className={styles.panel} 
+        style={{ 
+          background: 'linear-gradient(135deg, rgba(155, 89, 182, 0.15), rgba(52, 152, 219, 0.05))',
+          borderColor: 'rgba(155, 89, 182, 0.25)',
+          padding: 'var(--space-6)',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 'var(--space-5)',
+          borderRadius: 'var(--radius-lg)'
+        }}
+      >
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            width: '60px', 
+            height: '60px', 
+            borderRadius: '50%', 
+            background: 'linear-gradient(135deg, var(--color-accent), #9b59b6)',
+            color: '#fff',
+            boxShadow: '0 4px 15px rgba(155, 89, 182, 0.4)',
+            flexShrink: 0
+          }}
+        >
+          <BrainIcon size={32} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 6px 0' }}>
+            Operations AI Assistant
+          </h3>
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
+            To get personalized recommendations, real-time demand forecasting, inventory alerts, and actionable upselling recommendations, tap the **AI Assistant** bubble in the bottom right corner of your screen.
           </p>
         </div>
-
-        <div className={styles.panel} style={{ borderTop: '3px solid var(--color-warning)', padding: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <InventoryIcon size={18} color="var(--color-warning)" />
-            <h3 className={styles.panelTitle} style={{ fontSize: '0.95rem' }}>Inventory Risk</h3>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            Monitoring stock depletion rates... AI connection required to forecast stockouts.
-          </p>
-        </div>
-
-        <div className={styles.panel} style={{ borderTop: '3px solid var(--color-info)', padding: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <BrainIcon size={18} color="var(--color-info)" />
-            <h3 className={styles.panelTitle} style={{ fontSize: '0.95rem' }}>Revenue Opportunity</h3>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            Scanning for upselling patterns... AI connection required to generate bundling strategies.
-          </p>
-        </div>
-
-        <div className={styles.panel} style={{ borderTop: '3px solid var(--color-danger)', padding: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <AlertIcon size={18} color="var(--color-danger)" />
-            <h3 className={styles.panelTitle} style={{ fontSize: '0.95rem' }}>Decline Warning</h3>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            Tracking product drop-offs... AI connection required to detect underperforming menu items.
-          </p>
-        </div>
-
       </div>
     </section>
   );
 }
+

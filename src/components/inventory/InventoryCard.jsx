@@ -1,8 +1,9 @@
 import { formatProductName } from '../../lib/formatProductName';
+import { normalizeStockValue } from '../../lib/inventoryApi';
 import styles from './InventoryPage.module.css';
 
 export default function InventoryCard({ item, itemId, onClick }) {
-  const stock = item.currentStock || 0;
+  const stock = normalizeStockValue(item.stock !== undefined ? item.stock : item.currentStock);
   const warning = item.warningLevel || 10;
   const critical = item.criticalLevel || 5;
   

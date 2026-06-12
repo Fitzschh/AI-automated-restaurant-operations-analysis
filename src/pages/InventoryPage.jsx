@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import InventoryCard from '../components/inventory/InventoryCard';
 import StockAdjustmentModal from '../components/inventory/StockAdjustmentModal';
-import { onInventoryChange, syncInventoryWithMenu } from '../lib/inventoryApi';
+import { normalizeStockValue, onMenuAndInventoryChange, syncInventoryWithMenu } from '../lib/inventoryApi';
 import { SyncIcon, SearchIcon } from '../components/analytics/AnalyticsIcons';
 import styles from '../components/inventory/InventoryPage.module.css';
 
@@ -30,7 +30,7 @@ export default function InventoryPage() {
     if (!branchId) return;
 
     setLoading(true);
-    const unsub = onInventoryChange(branchId, (data) => {
+    const unsub = onMenuAndInventoryChange(branchId, (data) => {
       setInventory(data || {});
       setLoading(false);
       
@@ -82,7 +82,7 @@ export default function InventoryPage() {
       }
       
       // Apply status filter
-      const stock = item.currentStock || 0;
+      const stock = normalizeStockValue(item.stock !== undefined ? item.stock : item.currentStock);
       const warning = item.warningLevel || 10;
       const critical = item.criticalLevel || 5;
       
@@ -120,7 +120,7 @@ export default function InventoryPage() {
           disabled={syncing}
         >
           <SyncIcon size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-          {syncing ? 'Syncing...' : 'Sync with Menu'}
+          {syncing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
@@ -196,12 +196,12 @@ export default function InventoryPage() {
         <div className={styles.emptyState}>
           <InventoryIcon size={48} color="var(--color-text-muted)" />
           <div>
-            <h2 className={styles.emptyStateTitle}>No Inventory Found</h2>
-            <p className={styles.emptyStateText}>Your inventory tracking is currently empty. Click "Sync with Menu" to automatically create inventory records for all your existing menu items.</p>
+            <h2 className={styles.emptyStateTitle}>No Menu or Inventory Items Found</h2>
+            <p className={styles.emptyStateText}>Your inventory is empty. Please add items in Menu Management first, then click "Refresh" to see them here.</p>
           </div>
           <button className={styles.primaryBtn} onClick={handleSync} disabled={syncing}>
             <SyncIcon size={18} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-            {syncing ? 'Syncing...' : 'Sync with Menu'}
+            {syncing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       )}

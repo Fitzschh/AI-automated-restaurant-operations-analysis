@@ -16,7 +16,7 @@ import { formatCurrency, formatNumber } from '../../lib/statisticsUtils';
  * @param {Number} height - SVG height
  * @param {Boolean} isCurrency - Format tooltips as currency
  */
-export function LineChart({ data = [], color = '#16a085', height = 100, isCurrency = false }) {
+export function LineChart({ data = [], labels = [], color = '#16a085', height = 100, isCurrency = false }) {
   const [tooltip, setTooltip] = useState(null);
   
   if (!data || data.length === 0) {
@@ -38,8 +38,11 @@ export function LineChart({ data = [], color = '#16a085', height = 100, isCurren
   const pathStr = `M ${points.join(' L ')}`;
   const areaStr = `${pathStr} L ${width},${height} L 0,${height} Z`;
 
+  const labelStep = Math.max(1, Math.ceil(labels.length / 7));
+
   return (
-    <div className={styles.chartContainer} style={{ height }}>
+    <div className={styles.chartContainer} style={{ minHeight: height + (labels.length ? 28 : 0) }}>
+      <div style={{ height }}>
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
         <defs>
           <linearGradient id={`grad-${color}`} x1="0" x2="0" y1="0" y2="1">
@@ -74,13 +77,27 @@ export function LineChart({ data = [], color = '#16a085', height = 100, isCurren
               width={width / data.length}
               height={height}
               fill="transparent"
-              onMouseEnter={() => setTooltip({ val, x: pctX })}
+              onMouseEnter={() => setTooltip({ val, label: labels[i], x: pctX })}
               onMouseLeave={() => setTooltip(null)}
               style={{ cursor: 'crosshair' }}
             />
           );
         })}
       </svg>
+      </div>
+
+      {labels.length > 0 && (
+        <div className={styles.axisLabels}>
+          {labels.map((label, i) => {
+            const show = labels.length <= 8 || i === 0 || i === labels.length - 1 || i % labelStep === 0;
+            return (
+              <span key={`${label}-${i}`} className={!show ? styles.axisLabelHidden : undefined}>
+                {show ? label : ''}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tooltip */}
       {tooltip && (
@@ -88,6 +105,7 @@ export function LineChart({ data = [], color = '#16a085', height = 100, isCurren
           className={`${styles.tooltip} ${styles.visible}`} 
           style={{ left: `${tooltip.x}%`, top: '50%' }}
         >
+          {tooltip.label && <div className={styles.tooltipLabel}>{tooltip.label}</div>}
           {isCurrency ? formatCurrency(tooltip.val) : formatNumber(tooltip.val)}
         </div>
       )}
@@ -109,9 +127,11 @@ export function BarChart({ data = [], labels = [], color = '#3498db', height = 1
   const width = 1000;
   const barWidth = (width / data.length) * 0.7;
   const spacing = (width / data.length) * 0.3;
+  const labelStep = Math.max(1, Math.ceil(labels.length / 7));
 
   return (
-    <div className={styles.chartContainer} style={{ height }}>
+    <div className={styles.chartContainer} style={{ minHeight: height + (labels.length ? 28 : 0) }}>
+      <div style={{ height }}>
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
         {data.map((val, i) => {
           const barHeight = Math.max((val / max) * (height * 0.9), 2); // Min 2px height
@@ -136,6 +156,7 @@ export function BarChart({ data = [], labels = [], color = '#3498db', height = 1
           );
         })}
       </svg>
+      </div>
 
       {tooltip && (
         <div 
@@ -144,6 +165,19 @@ export function BarChart({ data = [], labels = [], color = '#3498db', height = 1
         >
           {tooltip.label && <div style={{ color: 'var(--color-text-muted)', fontSize: '0.65rem' }}>{tooltip.label}</div>}
           {formatNumber(tooltip.val)}
+        </div>
+      )}
+
+      {labels.length > 0 && (
+        <div className={styles.axisLabels}>
+          {labels.map((label, i) => {
+            const show = labels.length <= 8 || i === 0 || i === labels.length - 1 || i % labelStep === 0;
+            return (
+              <span key={`${label}-${i}`} className={!show ? styles.axisLabelHidden : undefined}>
+                {show ? label : ''}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
@@ -180,6 +214,11 @@ export function HeatmapRow({ data = [], colorBase = '52, 152, 219', height = 30 
   if (!data || data.length === 0) return null;
 
   const max = Math.max(...data, 1);
+  const formatHour = (hour) => {
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const display = hour % 12 || 12;
+    return `${display}:00 ${suffix}`;
+  };
 
   return (
     <div className={styles.chartContainer} style={{ height, display: 'flex', gap: '2px' }}>
@@ -210,7 +249,7 @@ export function HeatmapRow({ data = [], colorBase = '52, 152, 219', height = 30 
           className={`${styles.tooltip} ${styles.visible}`} 
           style={{ left: `${tooltip.x}%`, top: '-5px' }}
         >
-          <div style={{ color: 'var(--color-text-muted)', fontSize: '0.65rem' }}>{`${tooltip.hour}:00`}</div>
+          <div className={styles.tooltipLabel}>{formatHour(tooltip.hour)}</div>
           {`${tooltip.val} orders`}
         </div>
       )}

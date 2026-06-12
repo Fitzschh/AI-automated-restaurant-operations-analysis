@@ -1,12 +1,11 @@
 /**
  * AI Restaurant Operations Analyst Service
- * 
+ *
  * Sends pre-calculated analytics data to OpenAI GPT-4o-mini
- * and returns structured business insights.
- * 
- * The AI does NOT collect data or calculate analytics.
- * It only analyzes the provided data, identifies patterns,
- * and generates actionable recommendations.
+ * and returns conversational, human-friendly business insights.
+ *
+ * The AI behaves like an experienced restaurant operations supervisor —
+ * warm, professional, and actionable. No jargon, no robotic phrasing.
  */
 
 import { formatProductName } from './formatProductName';
@@ -17,53 +16,42 @@ const CACHE_KEY_PREFIX = 'ai_analyst_cache_';
 const CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
- * Build the system prompt for the AI analyst
+ * Build the conversational system prompt
  */
 function buildSystemPrompt() {
-  return `You are an AI Restaurant Operations Analyst integrated into a self-ordering system for cafes and restaurants.
+  return `You are a friendly and experienced restaurant operations supervisor helping a cafe or restaurant owner understand how their store is performing.
 
-You do NOT collect raw order data.
-You do NOT calculate analytics.
-A separate analytics engine already provides all statistical information.
-Your job is to analyze the provided analytics data, identify patterns, discover opportunities, detect problems, generate conclusions, and recommend actionable business improvements.
+You speak like a trusted business partner — warm, direct, and practical. Think of yourself as a senior store manager who has been in the food business for 15 years and is now giving a quick briefing to the owner.
 
-Think like a combination of:
-- Restaurant Operations Manager
-- Business Analyst
-- Data Analyst
-- Revenue Analyst
-- Inventory Planner
-- Customer Behavior Analyst
+Your personality:
+- Professional but approachable
+- You use plain language a busy owner can understand while running their store
+- You give specific, actionable advice — not vague suggestions
+- You reference actual product names and numbers from the data
+- You are honest about problems but encouraging about progress
 
-Your goal is to help restaurant owners make better decisions.
+Communication rules:
+- Do NOT use emoji characters anywhere
+- Do NOT use statistical jargon like "variance", "positive trend coefficient", or "standard deviation"
+- Do NOT use excessive percentages — use phrases like "about double", "nearly half", "a noticeable increase" instead
+- Do NOT sound like a corporate report — sound like a person talking to another person
+- Product names should be in proper human-readable format (no underscores)
+- Keep each section concise — 2-4 sentences maximum
+- If data is insufficient, say so honestly: "We don't have enough orders yet to see clear patterns."
 
-IMPORTANT RULES:
-- Do NOT invent data.
-- Do NOT make assumptions unsupported by the analytics.
-- Every conclusion must reference specific analytics metrics.
-- If data is insufficient, explicitly state: "Insufficient data available to draw a reliable conclusion."
-- Prioritize actionable recommendations over generic advice.
-- Do NOT use any emoji characters anywhere in your response.
-- Product names should be in proper human-readable format (no underscores).
-- Act like a restaurant consultant being paid to improve profitability, efficiency, customer experience, and operational decision-making.
-
-Return your analysis as valid JSON with this exact structure:
+Return your analysis as valid JSON with this structure:
 {
-  "executiveSummary": "string — concise summary of business performance, revenue health, order volume, product performance, operational observations",
-  "keyStrengths": ["string array — positive findings: high-performing products, revenue growth, consistent demand, popular periods, strong patterns"],
-  "opportunities": ["string array — revenue improvement ideas: upselling, bundles, combos, promotional timing, menu optimization"],
-  "risksAndConcerns": ["string array — weaknesses: slow-moving products, declining sales, revenue drops, underutilized hours, product cannibalization"],
-  "productAnalysis": "string — detailed analysis of product performance, growth/decline trends, best/worst sellers, product strategy recommendations",
-  "revenueAnalysis": "string — revenue health, growth direction, average order value analysis, revenue distribution insights",
-  "customerBehaviorAnalysis": "string — ordering patterns, peak hours behavior, frequency analysis, customer preferences",
-  "inventoryRecommendations": ["string array — specific inventory adjustments with percentage estimates where possible"],
-  "staffingRecommendations": ["string array — staffing adjustments based on hourly demand patterns"],
+  "greeting": "A brief, warm opening that summarizes the overall situation in 1-2 sentences. Example: 'Your store had a solid week. Revenue is healthy and your best sellers are keeping things moving.'",
+  "overallHealth": "2-3 sentences about business health — revenue direction, order volume, how things feel overall. Speak naturally.",
+  "topPerformers": "2-3 sentences about what's working well — best selling items, strong time periods, consistent demand. Name specific products.",
+  "concerns": "2-3 sentences about things to watch — slow items, quiet hours, declining products. Be honest but constructive.",
+  "quickWins": ["Array of 2-4 short, specific action items the owner can do this week. Example: 'Consider running a lunch combo with Spanish Latte and Croissant — both sell well but rarely together.'"],
   "priorityActions": {
-    "high": ["string array — actions requiring immediate attention"],
-    "medium": ["string array — actions likely to improve revenue"],
-    "low": ["string array — long-term optimizations"]
+    "urgent": ["1-2 things needing immediate attention, if any. Leave empty array if nothing is urgent."],
+    "recommended": ["2-3 actions that would likely improve revenue or operations."],
+    "longTerm": ["1-2 bigger ideas for the future."]
   },
-  "finalConclusion": "string — overall business conclusion and outlook"
+  "closingNote": "A brief encouraging closing remark. Example: 'Overall, your store is on a good track. Keep an eye on afternoon traffic and you should see a nice improvement next week.'"
 }
 
 Return ONLY valid JSON. No markdown, no code fences, no extra text.`;
@@ -131,7 +119,7 @@ function buildDataPrompt(analyticsData) {
     .map(([month, data]) => `  ${month}: ${data.orders || 0} orders, Revenue: ${data.revenue?.toFixed(2) || '0.00'}`)
     .join('\n');
 
-  return `Here is the complete analytics data from our restaurant self-ordering system. Analyze this data and provide your insights.
+  return `Here is the complete analytics data from our restaurant self-ordering system. Please review it and give us your assessment as our operations supervisor.
 
 === OVERALL SUMMARY ===
 Total Orders: ${summary.totalOrders || 0}
@@ -141,19 +129,18 @@ Best Selling Item: ${formatProductName(summary.bestSellingItem || 'N/A')}
 Least Selling Item: ${formatProductName(summary.leastSellingItem || 'N/A')}
 Last Updated: ${summary.lastUpdated || 'N/A'}
 
-=== CURRENT PERIOD METRICS ===
+=== CURRENT PERIOD ===
 Today: ${todayAnalytics.orders || 0} orders, Revenue: ${todayAnalytics.revenue?.toFixed(2) || '0.00'}
 This Week: ${weekAnalytics.orders || 0} orders, Revenue: ${weekAnalytics.revenue?.toFixed(2) || '0.00'}
 This Month: ${monthAnalytics.orders || 0} orders, Revenue: ${monthAnalytics.revenue?.toFixed(2) || '0.00'}
 
-=== STATISTICAL SUMMARY ===
+=== AVERAGES ===
 Mean Daily Orders: ${statistics.ordersPerDay?.mean || 0}
 Median Daily Orders: ${statistics.ordersPerDay?.median || 0}
-Mode Daily Orders: ${statistics.ordersPerDay?.mode || 0}
 Mean Daily Revenue: ${statistics.revenuePerDay?.mean || 0}
 Median Daily Revenue: ${statistics.revenuePerDay?.median || 0}
 
-=== PRODUCT PERFORMANCE (${productEntries.length} products) ===
+=== PRODUCTS (${productEntries.length} items) ===
 ${productSummary || 'No product data available.'}
 
 === DAILY TRENDS (Last 14 days) ===
@@ -168,7 +155,7 @@ ${weeklySummary || 'No weekly data available.'}
 === MONTHLY TRENDS ===
 ${monthlySummary || 'No monthly data available.'}
 
-Please analyze this data thoroughly and return your structured JSON analysis.`;
+Please give your honest assessment in the conversational JSON format.`;
 }
 
 /**
@@ -187,8 +174,8 @@ async function callOpenAI(systemPrompt, dataPrompt) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: dataPrompt },
       ],
-      max_tokens: 3000,
-      temperature: 0.4,
+      max_tokens: 2000,
+      temperature: 0.6,
     }),
   });
 
@@ -254,12 +241,12 @@ function cacheAnalysis(branchId, analysis) {
 
 /**
  * Generate AI analysis from analytics data
- * Returns a structured analysis object
- * 
+ * Returns a conversational analysis object
+ *
  * @param {Object} analyticsData - All analytics data from Firebase
  * @param {string} branchId - Branch identifier for caching
  * @param {boolean} forceRefresh - Skip cache and regenerate
- * @returns {Promise<Object>} Structured analysis
+ * @returns {Promise<Object>} Conversational analysis
  */
 export async function generateAIAnalysis(analyticsData, branchId, forceRefresh = false) {
   // Check cache first
@@ -275,19 +262,15 @@ export async function generateAIAnalysis(analyticsData, branchId, forceRefresh =
 
   const analysis = await callOpenAI(systemPrompt, dataPrompt);
 
-  // Validate required fields
+  // Validate and set defaults for conversational structure
   const defaultAnalysis = {
-    executiveSummary: '',
-    keyStrengths: [],
-    opportunities: [],
-    risksAndConcerns: [],
-    productAnalysis: '',
-    revenueAnalysis: '',
-    customerBehaviorAnalysis: '',
-    inventoryRecommendations: [],
-    staffingRecommendations: [],
-    priorityActions: { high: [], medium: [], low: [] },
-    finalConclusion: '',
+    greeting: '',
+    overallHealth: '',
+    topPerformers: '',
+    concerns: '',
+    quickWins: [],
+    priorityActions: { urgent: [], recommended: [], longTerm: [] },
+    closingNote: '',
     generatedAt: new Date().toISOString(),
     fromCache: false,
   };
@@ -296,11 +279,11 @@ export async function generateAIAnalysis(analyticsData, branchId, forceRefresh =
 
   // Ensure priorityActions has correct structure
   if (!result.priorityActions || typeof result.priorityActions !== 'object') {
-    result.priorityActions = { high: [], medium: [], low: [] };
+    result.priorityActions = { urgent: [], recommended: [], longTerm: [] };
   }
-  result.priorityActions.high = result.priorityActions.high || [];
-  result.priorityActions.medium = result.priorityActions.medium || [];
-  result.priorityActions.low = result.priorityActions.low || [];
+  result.priorityActions.urgent = result.priorityActions.urgent || [];
+  result.priorityActions.recommended = result.priorityActions.recommended || [];
+  result.priorityActions.longTerm = result.priorityActions.longTerm || [];
 
   // Cache the result
   if (branchId) {

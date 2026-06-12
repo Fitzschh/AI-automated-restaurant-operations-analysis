@@ -1,0 +1,432 @@
+/**
+ * AI Floating Chat Head Styles
+ *
+ * Messenger-style floating bubble in bottom-right corner.
+ * Expands to a clean, professional chat panel.
+ * Fully theme-aware via CSS custom properties.
+ */
+
+/* ── Chat Head (minimized) ────────────────────── */
+
+.chatHead {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 900;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #16a085, #1abc9c);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 16px rgba(22, 160, 133, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.25s ease;
+  color: #fff;
+}
+
+.chatHead:hover {
+  transform: scale(1.08);
+  box-shadow:
+    0 6px 24px rgba(22, 160, 133, 0.45),
+    0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.chatHead:active {
+  transform: scale(0.95);
+}
+
+/* Pulse ring animation when idle */
+.chatHead::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(22, 160, 133, 0.4);
+  animation: chatPulse 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes chatPulse {
+  0%, 100% { opacity: 0; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+/* Hide pulse when panel is open */
+.chatHead.active::after {
+  display: none;
+}
+
+/* ── Chat Panel (expanded) ────────────────────── */
+
+.chatPanel {
+  position: fixed;
+  bottom: 96px;
+  right: 28px;
+  z-index: 899;
+  width: 400px;
+  max-height: 520px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chatPanel.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* ── Panel Header ─────────────────────────────── */
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.panelAvatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #16a085, #1abc9c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.panelInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.panelName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.panelStatus {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2ecc71;
+  display: inline-block;
+}
+
+.closeBtn {
+  background: var(--color-bg-elevated);
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  background: var(--color-bg-card-hover);
+  color: var(--color-text-primary);
+}
+
+/* ── Chat Body ────────────────────────────────── */
+
+.chatBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.chatBody::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chatBody::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+/* ── Message Bubbles ──────────────────────────── */
+
+.messageBubble {
+  max-width: 92%;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--color-text-primary);
+  animation: bubbleIn 0.3s ease-out both;
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.messageBubble.ai {
+  align-self: flex-start;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-bottom-left-radius: 4px;
+}
+
+.messageBubble.system {
+  align-self: center;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 8px 12px;
+}
+
+/* ── AI Message Sections ──────────────────────── */
+
+.aiSection {
+  margin-bottom: 12px;
+}
+
+.aiSection:last-child {
+  margin-bottom: 0;
+}
+
+.aiSectionTitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-accent);
+  margin: 0 0 6px 0;
+}
+
+.aiSectionText {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.aiList {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aiListItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+}
+
+.aiBullet {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+  margin-top: 7px;
+}
+
+.priorityHigh { background: #e74c3c; }
+.priorityMedium { background: #f39c12; }
+.priorityLow { background: #2ecc71; }
+
+/* ── Timestamp ────────────────────────────────── */
+
+.messageTime {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  margin-top: 6px;
+  text-align: right;
+}
+
+/* ── Loading Dots ─────────────────────────────── */
+
+.loadingDots {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 20px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+}
+
+.loadingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+.loadingDot:nth-child(2) { animation-delay: 0.15s; }
+.loadingDot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Panel Footer ─────────────────────────────── */
+
+.panelFooter {
+  padding: 12px 18px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.refreshBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(22, 160, 133, 0.12), rgba(22, 160, 133, 0.06));
+  border: 1px solid rgba(22, 160, 133, 0.25);
+  border-radius: 8px;
+  color: #16a085;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  flex: 1;
+  justify-content: center;
+}
+
+.refreshBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(22, 160, 133, 0.22), rgba(22, 160, 133, 0.12));
+  border-color: rgba(22, 160, 133, 0.4);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refreshIcon {
+  display: flex;
+  transition: transform 0.3s;
+}
+
+.refreshIcon.spinning {
+  animation: spinRefresh 1s linear infinite;
+}
+
+@keyframes spinRefresh {
+  to { transform: rotate(360deg); }
+}
+
+.cacheHint {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ── Empty State ──────────────────────────────── */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  text-align: center;
+  flex: 1;
+}
+
+.emptyIcon {
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+
+.emptyTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 6px 0;
+}
+
+.emptyText {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+/* ── Responsive ───────────────────────────────── */
+
+@media (max-width: 480px) {
+  .chatPanel {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    bottom: 84px;
+    max-height: 70vh;
+  }
+
+  .chatHead {
+    right: 16px;
+    bottom: 20px;
+    width: 50px;
+    height: 50px;
+  }
+}

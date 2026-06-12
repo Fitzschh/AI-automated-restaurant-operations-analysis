@@ -12,12 +12,11 @@ import { useState, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useInventoryProcessor } from '../../hooks/useInventoryProcessor';
 import {
   TrendUpIcon,
   InventoryIcon,
   MenuBookIcon,
-  BrainIcon,
-  SettingsIcon,
   LogoutIcon,
   DashboardIcon,
 } from '../analytics/AnalyticsIcons';
@@ -30,9 +29,7 @@ const NAV_ITEMS = [
   { key: 'menu', label: 'Menu Management', icon: MenuBookIcon, pathFn: (b) => `/menu/${b}` },
 ];
 
-const SECONDARY_NAV = [
-  { key: 'ai', label: 'AI Analyst', icon: BrainIcon, pathFn: (b) => `/analytics/${b}`, hash: '#ai' },
-];
+// AI Analyst is now a floating chat head — no sidebar entry needed
 
 function getActiveKey(pathname) {
   if (pathname.includes('/analytics/')) return 'analytics';
@@ -76,6 +73,8 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
   const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  useInventoryProcessor(branchId, true);
+
   const activeKey = getActiveKey(location.pathname);
 
   const handleNav = useCallback((item) => {
@@ -107,7 +106,13 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
             <span className={styles.hamburgerLine} />
           </div>
         </button>
-        <span className={styles.mobileBrand}>Operations</span>
+        <img
+          src="/branding/touch-orders-icon-64.png"
+          alt=""
+          className={styles.mobileBrandIcon}
+          aria-hidden="true"
+        />
+        <span className={styles.mobileBrand}>E-Menu Portal</span>
       </div>
 
       {/* Overlay */}
@@ -122,11 +127,16 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
         <div className={styles.sidebarHeader}>
           <div className={styles.brandRow}>
             <div className={styles.brandIcon}>
-              <DashboardIcon size={18} color={theme === 'light' ? '#16a085' : '#fff'} />
+              <img
+                src="/branding/touch-orders-icon-64.png"
+                alt=""
+                className={styles.brandLogoMark}
+                aria-hidden="true"
+              />
             </div>
             <div>
-              <p className={styles.brandName}>Operations</p>
-              <p className={styles.brandSub}>Restaurant Platform</p>
+              <p className={styles.brandName}>Touch Orders</p>
+              <p className={styles.brandSub}>E-Menu Portal</p>
             </div>
           </div>
         </div>
@@ -149,21 +159,7 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
             ))}
           </div>
 
-          <div className={styles.navGroup}>
-            <div className={styles.navGroupLabel}>Intelligence</div>
-            {SECONDARY_NAV.map((item) => (
-              <button
-                key={item.key}
-                className={`${styles.navItem} ${activeKey === item.key ? styles.active : ''}`}
-                onClick={() => handleNav(item)}
-              >
-                <span className={styles.navIcon}>
-                  <item.icon size={18} />
-                </span>
-                <span className={styles.navLabel}>{item.label}</span>
-              </button>
-            ))}
-          </div>
+
 
           {/* Theme Toggle */}
           <div className={styles.navGroup}>

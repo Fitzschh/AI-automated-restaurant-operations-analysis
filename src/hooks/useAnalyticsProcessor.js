@@ -7,15 +7,20 @@
  * 
  * Features:
  * - Listens for order changes in real-time
- * - Automatically processes completed orders for analytics
- * - Prevents duplicate processing with analyticsProcessed flag
+ * - Processes each eligible order into persistent analytics once
+ * - Keeps analytics independent from operational order log cleanup
  * - Initializes analytics structure if needed
  */
 
 import { useEffect } from 'react';
 import { database } from '../lib/firebase';
 import { ref, onValue, off } from 'firebase/database';
-import { processOrderAnalytics, initializeAnalytics } from '../lib/analyticsApi';
+import {
+  initializeAnalytics,
+  initializeProcessedOrderLedger,
+  isAnalyticsOrder,
+  processOrderAnalytics,
+} from '../lib/analyticsApi';
 
 /**
  * Hook to monitor orders and automatically update analytics
@@ -33,47 +38,33 @@ export function useAnalyticsProcessor(branchId, enabled = true) {
       console.error('Failed to initialize analytics:', error);
     });
 
-    // Set up real-time listener for order logs
+    // Set up real-time listener for order logs. Logs are only the event source;
+    // analytics writes persist separately under {branchId}/analytics.
     const logsRef = ref(database, `${branchId}/logs`);
 
     let isProcessing = false;
+    let pendingSnapshot = null;
+    let ledgerInitialized = false;
 
     const handleOrdersChange = async (snapshot) => {
-      // Prevent overlapping processing
+      pendingSnapshot = snapshot.val() || {};
       if (isProcessing) return;
 
       try {
         isProcessing = true;
+        while (pendingSnapshot) {
+          const dataToProcess = pendingSnapshot;
+          pendingSnapshot = null;
 
-        const data = snapshot.val();
-        if (!data) {
-          isProcessing = false;
-          return;
-        }
-
-        // Process each order
-        const orders = Object.entries(data);
-        
-        for (const [orderId, orderData] of orders) {
-          // Only process completed orders
-          const status = orderData.status || 'pending';
-          if (status !== 'completed' && orderData.total === undefined && orderData.items === undefined) {
-            // Skip if it looks like a completed order structure doesn't exist
-            continue;
+          if (!ledgerInitialized) {
+            await initializeProcessedOrderLedger(branchId, dataToProcess);
+            ledgerInitialized = true;
           }
 
-          // Check if already processed
-          if (orderData.analyticsProcessed === true) {
-            // Already processed, skip
-            continue;
-          }
-
-          // Process this order for analytics
-          try {
+          const orders = Object.entries(dataToProcess || {});
+          for (const [orderId, orderData] of orders) {
+            if (!isAnalyticsOrder(orderData)) continue;
             await processOrderAnalytics(branchId, orderId, orderData);
-          } catch (error) {
-            console.error(`Error processing order ${orderId} for analytics:`, error);
-            // Continue with next order even if one fails
           }
         }
       } catch (error) {

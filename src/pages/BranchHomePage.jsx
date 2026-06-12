@@ -21,7 +21,7 @@ export default function BranchHomePage() {
     
     // Enable real-time analytics processing for this branch
     useAnalyticsProcessor(branchId, true);
-    
+
     const [appSettings, setAppSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);

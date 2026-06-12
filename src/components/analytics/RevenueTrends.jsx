@@ -3,13 +3,24 @@ import { formatCurrency } from '../../lib/statisticsUtils';
 import { LineChart } from './MiniChart';
 import styles from './AnalyticsSections.module.css';
 
+function formatDayLabel(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatMonthLabel(monthKey) {
+  const date = new Date(`${monthKey}-01T00:00:00`);
+  return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+}
+
 export default function RevenueTrends({ dailyData, monthlyData }) {
   const [period, setPeriod] = useState('7d'); // 7d, 30d, 12m
 
   const chartData = useMemo(() => {
-    if (!dailyData || !monthlyData) return { points: [], total: 0, avg: 0, peak: 0 };
+    if (!dailyData || !monthlyData) return { points: [], labels: [], total: 0, avg: 0, peak: 0 };
 
     let dataPoints = [];
+    let labels = [];
     let total = 0;
     let peak = 0;
 
@@ -24,6 +35,7 @@ export default function RevenueTrends({ dailyData, monthlyData }) {
         if (rev > peak) peak = rev;
         return rev;
       });
+      labels = last12.map(formatMonthLabel);
     } else {
       // Use daily data
       const sortedDays = Object.keys(dailyData).sort(); // YYYY-MM-DD
@@ -36,11 +48,12 @@ export default function RevenueTrends({ dailyData, monthlyData }) {
         if (rev > peak) peak = rev;
         return rev;
       });
+      labels = lastDays.map(formatDayLabel);
     }
 
     const avg = dataPoints.length > 0 ? total / dataPoints.length : 0;
 
-    return { points: dataPoints, total, avg, peak };
+    return { points: dataPoints, labels, total, avg, peak };
   }, [dailyData, monthlyData, period]);
 
   return (
@@ -71,7 +84,7 @@ export default function RevenueTrends({ dailyData, monthlyData }) {
         </div>
 
         <div className={styles.chartContainer}>
-          <LineChart data={chartData.points} color="#16a085" isCurrency={true} />
+          <LineChart data={chartData.points} labels={chartData.labels} color="#16a085" isCurrency={true} height={125} />
         </div>
 
         <div className={styles.panelFooter}>

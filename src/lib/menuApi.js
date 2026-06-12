@@ -130,12 +130,34 @@ export async function loadCategoryItems(branchId, category) {
 }
 
 export async function addItemToFirebase(branchId, category, itemId, item) {
+  const menuItem = {
+    ...item,
+    available: item.available !== false,
+  };
+
   await fetchWithAppCheck(dbUrl(`categories/${category}/${itemId}`, branchId), {
     method: 'PUT',
-    body: JSON.stringify(item),
+    body: JSON.stringify(menuItem),
     headers: { 'Content-Type': 'application/json' },
   });
-  await addMenuLog(branchId, `Added item: ${item.name || itemId} to ${category}`);
+
+  const inventoryRes = await fetchWithAppCheck(dbUrl(`inventory/${itemId}`, branchId));
+  const existingInventory = await inventoryRes.json();
+  if (!existingInventory || existingInventory.error) {
+    await fetchWithAppCheck(dbUrl(`inventory/${itemId}`, branchId), {
+      method: 'PUT',
+      body: JSON.stringify({
+        productName: menuItem.name || itemId,
+        stock: 1,
+        currentStock: 1,
+        lastUpdated: new Date().toISOString(),
+        lastModifiedBy: 'menu-add',
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  await addMenuLog(branchId, `Added item: ${menuItem.name || itemId} to ${category}`);
 }
 
 export async function deleteItem(branchId, category, itemKey) {

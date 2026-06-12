@@ -15,11 +15,14 @@
  *   ├── daily/ (orders and revenue by day)
  *   ├── weekly/ (orders and revenue by week)
  *   ├── monthly/ (orders and revenue by month)
+ *   ├── topProducts/ (ranked product performance)
+ *   ├── aiInsights/ (reserved for saved AI analysis)
+ *   ├── processedOrders/ (persistent idempotency ledger)
  *   └── statistics/ (calculated means, medians, etc.)
  */
 
-import { fetchWithAppCheck, dbUrl as baseDbUrl, database } from './firebase';
-import { ref, get, update, runTransaction } from 'firebase/database';
+import { database } from './firebase';
+import { ref, get, set, update, runTransaction, onValue, off } from 'firebase/database';
 import { calculateMean, calculateMedian, calculateMode } from './statisticsUtils';
 
 /**
@@ -27,6 +30,34 @@ import { calculateMean, calculateMedian, calculateMode } from './statisticsUtils
  */
 function analyticsPath(branchId, path) {
   return `${branchId}/analytics${path ? '/' + path : ''}`;
+}
+
+function createEmptyAnalytics() {
+  return {
+    summary: {
+      totalOrders: 0,
+      totalRevenue: 0,
+      averageOrderValue: 0,
+      bestSellingItem: '',
+      leastSellingItem: '',
+      lastUpdated: new Date().toISOString(),
+    },
+    products: {},
+    hourly: {},
+    daily: {},
+    weekly: {},
+    monthly: {},
+    topProducts: {},
+    aiInsights: {},
+    processedOrders: {},
+    meta: {
+      processedOrderLedgerInitialized: false,
+    },
+    statistics: {
+      ordersPerDay: { mean: 0, median: 0, mode: 0 },
+      revenuePerDay: { mean: 0, median: 0 },
+    },
+  };
 }
 
 /**
@@ -38,31 +69,8 @@ export async function initializeAnalytics(branchId) {
     const snapshot = await get(analyticsRef);
     
     if (!snapshot.exists()) {
-      const initialAnalytics = {
-        summary: {
-          totalOrders: 0,
-          totalRevenue: 0,
-          averageOrderValue: 0,
-          bestSellingItem: '',
-          leastSellingItem: '',
-          lastUpdated: new Date().toISOString(),
-        },
-        products: {},
-        hourly: {},
-        daily: {},
-        weekly: {},
-        monthly: {},
-        statistics: {
-          ordersPerDay: { mean: 0, median: 0, mode: 0 },
-          revenuePerDay: { mean: 0, median: 0 },
-        },
-      };
-      
-      await fetchWithAppCheck(baseDbUrl(analyticsPath(branchId)), {
-        method: 'PUT',
-        body: JSON.stringify(initialAnalytics),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      // Use Firebase SDK set() instead of REST API to avoid auth-flow mismatches
+      await set(analyticsRef, createEmptyAnalytics());
     }
   } catch (error) {
     console.error('Error initializing analytics:', error);
@@ -70,15 +78,15 @@ export async function initializeAnalytics(branchId) {
 }
 
 /**
- * Check if an order has already been processed for analytics
+ * Check if an order has already been processed for analytics.
+ * The analytics ledger is the source of truth because order logs can be deleted.
  */
 async function isOrderAlreadyProcessed(branchId, orderId) {
   try {
-    const orderRef = ref(database, `${branchId}/logs/${orderId}`);
-    const snapshot = await get(orderRef);
+    const processedRef = ref(database, analyticsPath(branchId, `processedOrders/${orderId}`));
+    const snapshot = await get(processedRef);
     if (!snapshot.exists()) return false;
-    const order = snapshot.val();
-    return order.analyticsProcessed === true;
+    return true;
   } catch (error) {
     console.error('Error checking if order was processed:', error);
     return false;
@@ -87,19 +95,14 @@ async function isOrderAlreadyProcessed(branchId, orderId) {
 
 /**
  * Mark an order as processed for analytics
+ * Uses Firebase SDK update() for consistent auth with the transaction writes.
  */
 async function markOrderAsProcessed(branchId, orderId) {
   try {
-    await fetchWithAppCheck(baseDbUrl(`${branchId}/logs/${orderId}/analyticsProcessed`), {
-      method: 'PUT',
-      body: JSON.stringify(true),
-      headers: { 'Content-Type': 'application/json' },
-    });
-    
-    await fetchWithAppCheck(baseDbUrl(`${branchId}/logs/${orderId}/analyticsProcessedAt`), {
-      method: 'PUT',
-      body: JSON.stringify(new Date().toISOString()),
-      headers: { 'Content-Type': 'application/json' },
+    const orderRef = ref(database, `${branchId}/logs/${orderId}`);
+    await update(orderRef, {
+      analyticsProcessed: true,
+      analyticsProcessedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error('Error marking order as processed:', error);
@@ -145,12 +148,238 @@ export function formatHourKey(date) {
   return String(date.getHours()).padStart(2, '0');
 }
 
+function getOrderDate(orderData) {
+  const date = new Date(orderData.timestamp || orderData.createdAt || Date.now());
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function getOrderItems(orderData) {
+  if (!orderData?.items) return [];
+  return Array.isArray(orderData.items) ? orderData.items : Object.values(orderData.items);
+}
+
+function getItemId(item) {
+  return item.itemId || item.id || item.key || item.name?.toLowerCase().trim().replace(/\s+/g, '_');
+}
+
+export function isAnalyticsOrder(orderData) {
+  if (!orderData || typeof orderData !== 'object') return false;
+  const status = String(orderData.status || '').toLowerCase();
+  if (['cancelled', 'canceled', 'void', 'voided', 'refunded', 'deleted'].includes(status)) {
+    return false;
+  }
+  return getOrderItems(orderData).length > 0 || orderData.total !== undefined;
+}
+
+function getOrderTotal(orderData, items) {
+  if (orderData.total !== undefined && orderData.total !== null) {
+    return Number(orderData.total || 0);
+  }
+
+  return items.reduce((sum, item) => {
+    const qty = Number(item.quantity || 1);
+    const subtotal = Number(item.subtotal || (Number(item.price || 0) * qty) || 0);
+    return sum + subtotal;
+  }, 0);
+}
+
+function applyOrderToAnalytics(analytics, orderData) {
+  const items = getOrderItems(orderData);
+  const orderTotal = getOrderTotal(orderData, items);
+  const orderDate = getOrderDate(orderData);
+  const dateKey = formatDateKey(orderDate);
+  const monthKey = formatMonthKey(orderDate);
+  const weekKey = formatWeekKey(orderDate);
+  const hourKey = formatHourKey(orderDate);
+
+  analytics.summary.totalOrders = Number(analytics.summary.totalOrders || 0) + 1;
+  analytics.summary.totalRevenue = Number((Number(analytics.summary.totalRevenue || 0) + orderTotal).toFixed(2));
+
+  if (!analytics.hourly[dateKey]) analytics.hourly[dateKey] = {};
+  if (!analytics.hourly[dateKey][hourKey]) analytics.hourly[dateKey][hourKey] = { orders: 0, revenue: 0 };
+  analytics.hourly[dateKey][hourKey].orders = Number(analytics.hourly[dateKey][hourKey].orders || 0) + 1;
+  analytics.hourly[dateKey][hourKey].revenue = Number((Number(analytics.hourly[dateKey][hourKey].revenue || 0) + orderTotal).toFixed(2));
+
+  if (!analytics.daily[dateKey]) analytics.daily[dateKey] = { orders: 0, revenue: 0, averageOrderValue: 0 };
+  analytics.daily[dateKey].orders = Number(analytics.daily[dateKey].orders || 0) + 1;
+  analytics.daily[dateKey].revenue = Number((Number(analytics.daily[dateKey].revenue || 0) + orderTotal).toFixed(2));
+  analytics.daily[dateKey].averageOrderValue = Number((analytics.daily[dateKey].revenue / analytics.daily[dateKey].orders).toFixed(2));
+
+  if (!analytics.weekly[weekKey]) analytics.weekly[weekKey] = { orders: 0, revenue: 0 };
+  analytics.weekly[weekKey].orders = Number(analytics.weekly[weekKey].orders || 0) + 1;
+  analytics.weekly[weekKey].revenue = Number((Number(analytics.weekly[weekKey].revenue || 0) + orderTotal).toFixed(2));
+
+  if (!analytics.monthly[monthKey]) analytics.monthly[monthKey] = { orders: 0, revenue: 0 };
+  analytics.monthly[monthKey].orders = Number(analytics.monthly[monthKey].orders || 0) + 1;
+  analytics.monthly[monthKey].revenue = Number((Number(analytics.monthly[monthKey].revenue || 0) + orderTotal).toFixed(2));
+
+  for (const item of items) {
+    const itemId = getItemId(item);
+    if (!itemId) continue;
+
+    const qty = Number(item.quantity || 1);
+    const subtotal = Number(item.subtotal || (Number(item.price || 0) * qty) || 0);
+
+    if (!analytics.products[itemId]) {
+      analytics.products[itemId] = {
+        name: item.name || itemId,
+        quantitySold: 0,
+        revenue: 0,
+        orderCount: 0,
+      };
+    }
+
+    analytics.products[itemId].quantitySold = Number(analytics.products[itemId].quantitySold || 0) + qty;
+    analytics.products[itemId].revenue = Number((Number(analytics.products[itemId].revenue || 0) + subtotal).toFixed(2));
+    analytics.products[itemId].orderCount = Number(analytics.products[itemId].orderCount || 0) + 1;
+  }
+}
+
+function normalizeAnalytics(current) {
+  const defaults = createEmptyAnalytics();
+  const data = current && typeof current === 'object' ? current : {};
+
+  return {
+    ...defaults,
+    ...data,
+    summary: { ...defaults.summary, ...(data.summary || {}) },
+    products: data.products || {},
+    hourly: data.hourly || {},
+    daily: data.daily || {},
+    weekly: data.weekly || {},
+    monthly: data.monthly || {},
+    topProducts: data.topProducts || {},
+    aiInsights: data.aiInsights || {},
+    processedOrders: data.processedOrders || {},
+    meta: { ...defaults.meta, ...(data.meta || {}) },
+    statistics: {
+      ordersPerDay: {
+        ...defaults.statistics.ordersPerDay,
+        ...(data.statistics?.ordersPerDay || {}),
+      },
+      revenuePerDay: {
+        ...defaults.statistics.revenuePerDay,
+        ...(data.statistics?.revenuePerDay || {}),
+      },
+    },
+  };
+}
+
+function updateDerivedAnalytics(analytics) {
+  const productEntries = Object.entries(analytics.products);
+  if (productEntries.length > 0) {
+    const bestSeller = productEntries.reduce((a, b) => (
+      b[1].quantitySold > a[1].quantitySold ? b : a
+    ));
+    const leastSeller = productEntries.reduce((a, b) => (
+      b[1].quantitySold < a[1].quantitySold ? b : a
+    ));
+    analytics.summary.bestSellingItem = bestSeller[0];
+    analytics.summary.leastSellingItem = leastSeller[0];
+    analytics.topProducts = Object.fromEntries(
+      productEntries
+        .sort((a, b) => (b[1].quantitySold || 0) - (a[1].quantitySold || 0))
+        .slice(0, 10)
+    );
+  } else {
+    analytics.summary.bestSellingItem = '';
+    analytics.summary.leastSellingItem = '';
+    analytics.topProducts = {};
+  }
+
+  analytics.summary.averageOrderValue = analytics.summary.totalOrders > 0
+    ? Number((analytics.summary.totalRevenue / analytics.summary.totalOrders).toFixed(2))
+    : 0;
+  analytics.summary.lastUpdated = new Date().toISOString();
+
+  const dailyEntries = Object.values(analytics.daily);
+  if (dailyEntries.length > 0) {
+    const dailyOrders = dailyEntries.map(d => d.orders || 0);
+    const dailyRevenues = dailyEntries.map(d => d.revenue || 0);
+    analytics.statistics = {
+      ordersPerDay: {
+        mean: Number(calculateMean(dailyOrders).toFixed(2)),
+        median: Number(calculateMedian(dailyOrders).toFixed(2)),
+        mode: calculateMode(dailyOrders),
+      },
+      revenuePerDay: {
+        mean: Number(calculateMean(dailyRevenues).toFixed(2)),
+        median: Number(calculateMedian(dailyRevenues).toFixed(2)),
+      },
+    };
+  } else {
+    analytics.statistics = {
+      ordersPerDay: { mean: 0, median: 0, mode: 0 },
+      revenuePerDay: { mean: 0, median: 0 },
+    };
+  }
+
+  return analytics;
+}
+
+/**
+ * One-time migration helper for branches that already had analytics before the
+ * persistent processedOrders ledger existed. If analytics already has totals,
+ * the current operational logs are treated as already represented so the new
+ * incremental processor does not double-count them.
+ */
+export async function initializeProcessedOrderLedger(branchId, logsData = {}) {
+  const analyticsRef = ref(database, analyticsPath(branchId));
+  const now = new Date().toISOString();
+
+  await runTransaction(analyticsRef, (current) => {
+    const analytics = normalizeAnalytics(current);
+    const hasLedger = Object.keys(analytics.processedOrders || {}).length > 0;
+    const ledgerInitialized = analytics.meta?.processedOrderLedgerInitialized === true;
+
+    if (hasLedger || ledgerInitialized) {
+      return analytics;
+    }
+
+    const existingOrderCount = Number(analytics.summary?.totalOrders || 0);
+    const eligibleOrders = Object.entries(logsData || {})
+      .filter(([, orderData]) => isAnalyticsOrder(orderData));
+    const lastUpdatedDate = new Date(analytics.summary?.lastUpdated || '');
+    const hasValidLastUpdated = !Number.isNaN(lastUpdatedDate.getTime());
+
+    if (existingOrderCount > 0) {
+      for (const [orderId, orderData] of eligibleOrders) {
+        const orderDate = getOrderDate(orderData);
+        const shouldSeedAsExisting = orderData.analyticsProcessed === true
+          || (hasValidLastUpdated && orderDate <= lastUpdatedDate)
+          || (!hasValidLastUpdated && eligibleOrders.length <= existingOrderCount);
+
+        if (!shouldSeedAsExisting) continue;
+
+        const items = getOrderItems(orderData);
+        analytics.processedOrders[orderId] = {
+          orderId,
+          processedAt: orderData.analyticsProcessedAt || now,
+          orderDate: orderDate.toISOString(),
+          total: getOrderTotal(orderData, items),
+          migratedFromExistingAnalytics: true,
+        };
+      }
+    }
+
+    analytics.meta = {
+      ...(analytics.meta || {}),
+      processedOrderLedgerInitialized: true,
+      processedOrderLedgerInitializedAt: now,
+    };
+
+    return analytics;
+  });
+}
+
 /**
  * Process a single completed order and update analytics
  * This function uses transactions to ensure data consistency
  */
 export async function processOrderAnalytics(branchId, orderId, orderData) {
   try {
+    if (!isAnalyticsOrder(orderData)) return;
+
     // Ensure analytics structure exists
     await initializeAnalytics(branchId);
     
@@ -161,140 +390,32 @@ export async function processOrderAnalytics(branchId, orderId, orderData) {
       return;
     }
     
-    const orderDate = new Date(orderData.timestamp || Date.now());
-    const dateKey = formatDateKey(orderDate);
-    const monthKey = formatMonthKey(orderDate);
-    const weekKey = formatWeekKey(orderDate);
-    const hourKey = formatHourKey(orderDate);
+    const orderDate = getOrderDate(orderData);
     
     // Extract order values
-    const orderTotal = Number(orderData.total || 0);
-    const items = Array.isArray(orderData.items) ? orderData.items : Object.values(orderData.items || {});
+    const items = getOrderItems(orderData);
+    const orderTotal = getOrderTotal(orderData, items);
     
     // Use transactions for atomic updates of counters
     const analyticsRef = ref(database, analyticsPath(branchId));
     
     await runTransaction(analyticsRef, (current) => {
-      if (current === null) {
-        return current;
+      const analytics = normalizeAnalytics(current);
+
+      if (analytics.processedOrders?.[orderId]) {
+        return analytics;
       }
-      
-      // ===== Update Summary =====
-      const summary = current.summary || {};
-      summary.totalOrders = (summary.totalOrders || 0) + 1;
-      summary.totalRevenue = Number(summary.totalRevenue || 0) + orderTotal;
-      summary.averageOrderValue = summary.totalOrders > 0 
-        ? Number((summary.totalRevenue / summary.totalOrders).toFixed(2))
-        : 0;
-      summary.lastUpdated = new Date().toISOString();
-      
-      // ===== Update Products =====
-      const products = current.products || {};
-      
-      for (const item of items) {
-        const itemId = item.itemId || item.name?.toLowerCase().replace(/\s+/g, '_');
-        if (!itemId) continue;
-        
-        const itemSubtotal = Number(item.subtotal || (item.price * item.quantity) || 0);
-        const itemQty = Number(item.quantity || 1);
-        
-        if (!products[itemId]) {
-          products[itemId] = {
-            name: item.name || itemId,
-            quantitySold: 0,
-            revenue: 0,
-            orderCount: 0,
-          };
-        }
-        
-        products[itemId].quantitySold = (products[itemId].quantitySold || 0) + itemQty;
-        products[itemId].revenue = Number((Number(products[itemId].revenue || 0) + itemSubtotal).toFixed(2));
-        products[itemId].orderCount = (products[itemId].orderCount || 0) + 1;
-      }
-      
-      // Find best and least selling items
-      if (Object.keys(products).length > 0) {
-        const productEntries = Object.entries(products);
-        const bestSeller = productEntries.reduce((a, b) => 
-          b[1].quantitySold > a[1].quantitySold ? b : a
-        );
-        const leastSeller = productEntries.reduce((a, b) => 
-          b[1].quantitySold < a[1].quantitySold ? b : a
-        );
-        summary.bestSellingItem = bestSeller[0];
-        summary.leastSellingItem = leastSeller[0];
-      }
-      
-      // ===== Update Time-based Analytics =====
-      
-      // Hourly
-      const hourly = current.hourly || {};
-      if (!hourly[dateKey]) hourly[dateKey] = {};
-      if (!hourly[dateKey][hourKey]) {
-        hourly[dateKey][hourKey] = { orders: 0, revenue: 0 };
-      }
-      hourly[dateKey][hourKey].orders = (hourly[dateKey][hourKey].orders || 0) + 1;
-      hourly[dateKey][hourKey].revenue = Number((Number(hourly[dateKey][hourKey].revenue || 0) + orderTotal).toFixed(2));
-      
-      // Daily
-      const daily = current.daily || {};
-      if (!daily[dateKey]) {
-        daily[dateKey] = { orders: 0, revenue: 0, averageOrderValue: 0 };
-      }
-      daily[dateKey].orders = (daily[dateKey].orders || 0) + 1;
-      daily[dateKey].revenue = Number((Number(daily[dateKey].revenue || 0) + orderTotal).toFixed(2));
-      daily[dateKey].averageOrderValue = daily[dateKey].orders > 0
-        ? Number((daily[dateKey].revenue / daily[dateKey].orders).toFixed(2))
-        : 0;
-      
-      // Weekly
-      const weekly = current.weekly || {};
-      if (!weekly[weekKey]) {
-        weekly[weekKey] = { orders: 0, revenue: 0 };
-      }
-      weekly[weekKey].orders = (weekly[weekKey].orders || 0) + 1;
-      weekly[weekKey].revenue = Number((Number(weekly[weekKey].revenue || 0) + orderTotal).toFixed(2));
-      
-      // Monthly
-      const monthly = current.monthly || {};
-      if (!monthly[monthKey]) {
-        monthly[monthKey] = { orders: 0, revenue: 0 };
-      }
-      monthly[monthKey].orders = (monthly[monthKey].orders || 0) + 1;
-      monthly[monthKey].revenue = Number((Number(monthly[monthKey].revenue || 0) + orderTotal).toFixed(2));
-      
-      // ===== Update Statistics (calculate based on daily data) =====
-      const statistics = current.statistics || { 
-        ordersPerDay: { mean: 0, median: 0, mode: 0 },
-        revenuePerDay: { mean: 0, median: 0 },
+
+      applyOrderToAnalytics(analytics, orderData);
+
+      analytics.processedOrders[orderId] = {
+        orderId,
+        processedAt: new Date().toISOString(),
+        orderDate: orderDate.toISOString(),
+        total: Number(orderTotal.toFixed(2)),
       };
       
-      if (Object.keys(daily).length > 0) {
-        const dailyOrders = Object.values(daily).map(d => d.orders);
-        const dailyRevenues = Object.values(daily).map(d => d.revenue);
-        
-        statistics.ordersPerDay = {
-          mean: Number(calculateMean(dailyOrders).toFixed(2)),
-          median: Number(calculateMedian(dailyOrders).toFixed(2)),
-          mode: calculateMode(dailyOrders),
-        };
-        
-        statistics.revenuePerDay = {
-          mean: Number(calculateMean(dailyRevenues).toFixed(2)),
-          median: Number(calculateMedian(dailyRevenues).toFixed(2)),
-        };
-      }
-      
-      return {
-        ...current,
-        summary,
-        products,
-        hourly,
-        daily,
-        weekly,
-        monthly,
-        statistics,
-      };
+      return updateDerivedAnalytics(analytics);
     });
     
     // Mark order as processed
@@ -481,17 +602,6 @@ export async function getTodayAnalytics(branchId) {
 }
 
 /**
- * Get week number from date
- */
-function getWeekNumber(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-/**
  * Get current week's analytics
  */
 export async function getCurrentWeekAnalytics(branchId) {
@@ -531,11 +641,6 @@ export async function getCurrentMonthAnalytics(branchId) {
   }
 }
 
-/**
- * Real-time listener for analytics summary
- */
-import { onValue, off } from 'firebase/database';
-
 export function onAnalyticsSummaryChange(branchId, callback) {
   const summaryRef = ref(database, analyticsPath(branchId, 'summary'));
   const handler = (snapshot) => {
@@ -550,6 +655,19 @@ export function onAnalyticsSummaryChange(branchId, callback) {
   };
   onValue(summaryRef, handler);
   return () => off(summaryRef, 'value', handler);
+}
+
+/**
+ * Real-time listener for the full analytics document.
+ * Prefer this on dashboard screens to avoid many parallel Firebase reads/listeners.
+ */
+export function onAnalyticsChange(branchId, callback) {
+  const analyticsRef = ref(database, analyticsPath(branchId));
+  const handler = (snapshot) => {
+    callback(normalizeAnalytics(snapshot.val()));
+  };
+  onValue(analyticsRef, handler);
+  return () => off(analyticsRef, 'value', handler);
 }
 
 /**
@@ -574,4 +692,40 @@ export function onDailyAnalyticsChange(branchId, callback) {
   };
   onValue(dailyRef, handler);
   return () => off(dailyRef, 'value', handler);
+}
+
+/**
+ * Real-time listener for hourly analytics on a specific date
+ */
+export function onHourlyAnalyticsChange(branchId, dateKey, callback) {
+  const hourlyRef = ref(database, analyticsPath(branchId, `hourly/${dateKey}`));
+  const handler = (snapshot) => {
+    callback(snapshot.val() || {});
+  };
+  onValue(hourlyRef, handler);
+  return () => off(hourlyRef, 'value', handler);
+}
+
+/**
+ * Real-time listener for weekly analytics
+ */
+export function onWeeklyAnalyticsChange(branchId, callback) {
+  const weeklyRef = ref(database, analyticsPath(branchId, 'weekly'));
+  const handler = (snapshot) => {
+    callback(snapshot.val() || {});
+  };
+  onValue(weeklyRef, handler);
+  return () => off(weeklyRef, 'value', handler);
+}
+
+/**
+ * Real-time listener for monthly analytics
+ */
+export function onMonthlyAnalyticsChange(branchId, callback) {
+  const monthlyRef = ref(database, analyticsPath(branchId, 'monthly'));
+  const handler = (snapshot) => {
+    callback(snapshot.val() || {});
+  };
+  onValue(monthlyRef, handler);
+  return () => off(monthlyRef, 'value', handler);
 }
