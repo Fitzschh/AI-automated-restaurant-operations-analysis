@@ -1,7 +1,10 @@
 const { onRequest } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
+
+const openAiApiKey = defineSecret('OPENAI_API_KEY');
 
 function stripEmoji(value) {
   return String(value || '').replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]/gu, '').trim();
@@ -165,7 +168,7 @@ async function verifyFirebaseUser(req) {
   return admin.auth().verifyIdToken(match[1]);
 }
 
-exports.aiAnalysis = onRequest({ cors: true }, async (req, res) => {
+exports.aiAnalysis = onRequest({ cors: true, secrets: [openAiApiKey] }, async (req, res) => {
   if (req.method !== 'POST') {
     res.set('Allow', 'POST');
     res.status(405).json({ error: 'Method not allowed.' });
@@ -183,7 +186,7 @@ exports.aiAnalysis = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = openAiApiKey.value();
   if (!apiKey) {
     console.error('OPENAI_API_KEY is not configured on the server.');
     res.status(500).json({ error: 'AI analysis is not configured. Set OPENAI_API_KEY on the server.' });
@@ -203,6 +206,7 @@ exports.aiAnalysis = onRequest({ cors: true }, async (req, res) => {
           { role: 'system', content: buildSystemPrompt() },
           { role: 'user', content: buildDataPrompt(req.body?.analyticsData) },
         ],
+        response_format: { type: 'json_object' },
         max_tokens: 2000,
         temperature: 0.6,
       }),
@@ -218,7 +222,7 @@ exports.aiAnalysis = onRequest({ cors: true }, async (req, res) => {
     const analysis = parseModelJson(data.choices?.[0]?.message?.content);
     res.status(200).json(analysis);
   } catch (error) {
-    console.error('AI analysis request failed.');
+    console.error('AI analysis request failed:', error.message);
     res.status(500).json({ error: 'AI analysis failed on the server.' });
   }
 });
