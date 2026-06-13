@@ -1,21 +1,7 @@
-/**
- * MiniChart - Pure SVG Chart Components
- * 
- * Provides LineChart, BarChart, HorizontalBar, and HeatmapRow
- * without any external dependencies. Responsive via viewBox.
- */
-
 import { useState } from 'react';
 import styles from './MiniChart.module.css';
 import { formatCurrency, formatNumber } from '../../lib/statisticsUtils';
 
-/**
- * Line Chart with gradient area fill
- * @param {Array} data - Array of values
- * @param {String} color - Base color (hex)
- * @param {Number} height - SVG height
- * @param {Boolean} isCurrency - Format tooltips as currency
- */
 export function LineChart({ data = [], labels = [], color = '#16a085', height = 100, isCurrency = false }) {
   const [tooltip, setTooltip] = useState(null);
   
@@ -27,8 +13,7 @@ export function LineChart({ data = [], labels = [], color = '#16a085', height = 
   const min = Math.min(...data, 0);
   const range = max - min;
   
-  // Create path string
-  const width = 1000; // viewBox width
+  const width = 1000;
   const points = data.map((val, i) => {
     const x = (i / Math.max(data.length - 1, 1)) * width;
     const y = height - ((val - min) / range) * (height * 0.8) - (height * 0.1);
@@ -51,10 +36,8 @@ export function LineChart({ data = [], labels = [], color = '#16a085', height = 
           </linearGradient>
         </defs>
         
-        {/* Area fill */}
         <path d={areaStr} fill={`url(#grad-${color})`} className={styles.areaPath} />
         
-        {/* Line */}
         <path 
           d={pathStr} 
           fill="none" 
@@ -65,7 +48,6 @@ export function LineChart({ data = [], labels = [], color = '#16a085', height = 
           className={styles.linePath} 
         />
         
-        {/* Interaction zones */}
         {data.map((val, i) => {
           const x = (i / Math.max(data.length - 1, 1)) * width;
           const pctX = (i / Math.max(data.length - 1, 1)) * 100;

@@ -27,17 +27,14 @@ function ProtectedRoute({ children, adminOnly = false, branchId: staticBranchId 
 
   const userEmail = user?.email;
 
-  // Admin check
   if (isUserAdmin(userEmail)) {
     return children;
   }
 
-  // Admin only check
   if (adminOnly) {
     return <Navigate to="/" replace />;
   }
 
-  // Branch access control
   if (branchId) {
     if (!canAccessBranch(userEmail, branchId)) {
       console.log('Unauthorized branch access:', { user: userEmail, requested: branchId });
@@ -103,7 +100,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        {/* Fallback for legacy /menu access if needed, or redirect */}
         <Route
           path="/inventory/:branchId"
           element={

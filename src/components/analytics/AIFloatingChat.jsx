@@ -1,20 +1,8 @@
-/**
- * AI Floating Chat Head
- *
- * Messenger-style floating bubble in the bottom-right corner.
- * Minimized by default. Expands to a chat panel when clicked.
- * Auto-generates analysis on first open.
- * Uses conversational AI responses (no rigid JSON sections).
- */
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateAIAnalysis, clearAnalysisCache } from '../../lib/aiAnalystService';
 import { BrainIcon, RefreshIcon } from './AnalyticsIcons';
 import styles from './AIFloatingChat.module.css';
 
-/**
- * Renders AI analysis as conversational chat bubbles
- */
 function AnalysisMessages({ analysis }) {
   if (!analysis) return null;
 
@@ -114,7 +102,6 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
   const bodyRef = useRef(null);
   const analyticsSignatureRef = useRef('');
 
-  // Auto-scroll to bottom when new messages appear
   useEffect(() => {
     if (bodyRef.current) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
@@ -140,14 +127,12 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
     }
   }, [analyticsData, branchId, generating]);
 
-  // Auto-generate on first open
   const handleToggle = useCallback(() => {
     const willOpen = !open;
     setOpen(willOpen);
 
     if (willOpen && !analysis && !hasAutoTriggered && !generating) {
       setHasAutoTriggered(true);
-      // Small delay so the panel animation plays first
       setTimeout(() => handleGenerate(false), 300);
     }
   }, [open, analysis, hasAutoTriggered, generating, handleGenerate]);
@@ -185,7 +170,6 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
 
   return (
     <>
-      {/* Floating chat head button */}
       <button
         className={`${styles.chatHead} ${open ? styles.active : ''}`}
         onClick={handleToggle}
@@ -195,9 +179,7 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
         <BrainIcon size={24} />
       </button>
 
-      {/* Expandable chat panel */}
       <div className={`${styles.chatPanel} ${open ? styles.open : ''}`}>
-        {/* Header */}
         <div className={styles.panelHeader}>
           <div className={styles.panelAvatar}>
             <BrainIcon size={18} />
@@ -214,7 +196,6 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
           </button>
         </div>
 
-        {/* Chat Body */}
         <div className={styles.chatBody} ref={bodyRef}>
           {!hasData && !analysis && !generating && (
             <div className={styles.emptyState}>
@@ -256,7 +237,6 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
           )}
         </div>
 
-        {/* Footer */}
         {hasData && (
           <div className={styles.panelFooter}>
             <button

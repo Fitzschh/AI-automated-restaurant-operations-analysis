@@ -7,7 +7,6 @@ const AuthContext = createContext(null);
 
 const AUTH_KEY = 'e-menu-user';
 
-// Initialize persistence - keep user logged in after refresh
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
     console.log("Persistence set to LOCAL");
@@ -23,7 +22,6 @@ export function AuthProvider({ children }) {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Use Firebase onAuthStateChanged for secure session management
   React.useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       try {
@@ -35,7 +33,6 @@ export function AuthProvider({ children }) {
           setUser(userData);
           localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
 
-          // Load user nickname using UID
           const userNickname = await loadUserNickname(firebaseUser.uid);
           setNickname(userNickname);
 
@@ -61,7 +58,6 @@ export function AuthProvider({ children }) {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // setUser and localStorage will be handled by onAuthStateChanged
       return true;
     } catch (err) {
       setError(err.message);
@@ -87,7 +83,6 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       await signOut(auth);
-      // setUser and localStorage will be handled by onAuthStateChanged
     } catch (err) {
       setError(err.message);
     } finally {
@@ -109,12 +104,6 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  /**
-   * Change password for the currently signed-in user.
-   * Requires recent authentication. If it fails with 'requires-recent-login',
-   * the caller should prompt the user to re-authenticate.
-   * TODO: Wire up re-authentication flow if needed.
-   */
   const changePassword = useCallback(async (newPassword) => {
     if (!auth.currentUser) {
       setError('No user is currently signed in');

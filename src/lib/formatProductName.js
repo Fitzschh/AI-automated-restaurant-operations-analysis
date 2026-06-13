@@ -1,28 +1,8 @@
-/**
- * Product Name Formatting Utility
- * 
- * Converts raw database product names (with underscores) into
- * human-readable display names.
- * Also strips emoji characters from any string.
- * 
- * Examples:
- *   matcha_latte       -> Matcha Latte
- *   spanish_latte_16oz -> Spanish Latte 16oz
- *   iced_americano     -> Iced Americano
- */
-
-// Regex to match emoji and symbol characters
 const EMOJI_REGEX = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
 
-/**
- * Convert a raw database product name into a human-readable name
- * @param {string} raw - The raw product name (e.g. "matcha_latte" or "Spanish Latte")
- * @returns {string} The formatted name (e.g. "Matcha Latte")
- */
 export function formatProductName(raw) {
   if (!raw || typeof raw !== 'string') return '';
 
-  // Strip emojis first
   const cleaned = raw.replace(EMOJI_REGEX, '').replace(/_/g, ' ').trim();
 
   return cleaned
@@ -37,11 +17,6 @@ export function formatProductName(raw) {
     .trim();
 }
 
-/**
- * Strip all emoji characters from a string
- * @param {string} str - Input string
- * @returns {string} String with emojis removed
- */
 export function stripEmojis(str) {
   if (!str || typeof str !== 'string') return '';
   return str.replace(EMOJI_REGEX, '').trim();

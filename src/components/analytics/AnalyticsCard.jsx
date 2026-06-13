@@ -1,9 +1,3 @@
-/**
- * AnalyticsCard Component
- * 
- * Reusable card for displaying a single metric.
- * Updated to use design tokens.
- */
 import styles from './AnalyticsDashboard.module.css';
 
 export default function AnalyticsCard({ 

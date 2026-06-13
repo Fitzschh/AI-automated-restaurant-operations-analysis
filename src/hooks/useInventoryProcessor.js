@@ -1,15 +1,3 @@
-/**
- * useInventoryProcessor Hook
- * 
- * Real-time listener that detects new/completed orders and decrements stock in inventory.
- * 
- * Features:
- * - Listens for order changes in real-time
- * - Decrements inventory stock for items in completed/placed orders
- * - Prevents duplicate processing using `inventoryProcessed` flag
- * - Syncs inventory records with menu on mount
- */
-
 import { useEffect } from 'react';
 import { database } from '../lib/firebase';
 import { ref, onValue, off } from 'firebase/database';
@@ -28,22 +16,14 @@ function shouldProcessInventoryOrder(orderData) {
   return !['cancelled', 'canceled', 'void', 'voided', 'refunded', 'deleted'].includes(status);
 }
 
-/**
- * Hook to monitor orders and automatically consume inventory stock
- * 
- * @param {string} branchId - The branch ID to monitor
- * @param {boolean} enabled - Whether to enable the listener (default: true)
- */
 export function useInventoryProcessor(branchId, enabled = true) {
   useEffect(() => {
     if (!branchId || !enabled) return;
 
-    // Ensure all menu items have inventory records before we start processing
     syncInventoryWithMenu(branchId, 'inventory-processor', { syncAvailability: false }).catch(error => {
       console.error('Failed to sync inventory with menu:', error);
     });
 
-    // Set up real-time listener for order logs
     const logsRef = ref(database, `${branchId}/logs`);
 
     let isProcessing = false;
@@ -78,7 +58,6 @@ export function useInventoryProcessor(branchId, enabled = true) {
                 await consumeStockForOrder(branchId, orderId, itemsArray);
               }
               
-              // Mark as processed
               await markOrderInventoryProcessed(branchId, orderId);
             } catch (error) {
               console.error(`Error processing inventory for order ${orderId}:`, error);

@@ -1,13 +1,3 @@
-/**
- * DashboardLayout — Sidebar navigation wrapper
- *
- * Provides a consistent sidebar + main area shell for all
- * dashboard pages (Analytics, Inventory, Orders, etc.).
- * Responsive: collapses to a hamburger menu on mobile.
- * No emojis — all SVG icons.
- * Includes theme toggle (light/dark).
- */
-
 import { useState, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -29,8 +19,6 @@ const NAV_ITEMS = [
   { key: 'menu', label: 'Menu Management', icon: MenuBookIcon, pathFn: (b) => `/menu/${b}` },
 ];
 
-// AI Analyst is now a floating chat head — no sidebar entry needed
-
 function getActiveKey(pathname) {
   if (pathname.includes('/analytics/')) return 'analytics';
   if (pathname.includes('/inventory/')) return 'inventory';
@@ -39,7 +27,6 @@ function getActiveKey(pathname) {
   return 'home';
 }
 
-/** Simple SVG icons for theme toggle — no emojis */
 function SunIcon({ size = 16 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -93,7 +80,6 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
 
   return (
     <div className={styles.layoutWrapper}>
-      {/* Mobile Header */}
       <div className={styles.mobileHeader}>
         <button
           className={styles.hamburgerBtn}
@@ -115,15 +101,12 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
         <span className={styles.mobileBrand}>E-Menu Portal</span>
       </div>
 
-      {/* Overlay */}
       <div
         className={`${styles.overlay} ${sidebarOpen ? styles.visible : ''}`}
         onClick={() => setSidebarOpen(false)}
       />
 
-      {/* Sidebar */}
       <aside className={`${styles.sidebar} ${sidebarOpen ? styles.open : ''}`}>
-        {/* Brand */}
         <div className={styles.sidebarHeader}>
           <div className={styles.brandRow}>
             <div className={styles.brandIcon}>

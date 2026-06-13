@@ -1,17 +1,3 @@
-/**
- * useAnalyticsProcessor Hook
- * 
- * Real-time listener that detects new/completed orders and updates analytics
- * This hook should be used in the main app or BranchHomePage to ensure
- * analytics are updated whenever orders change
- * 
- * Features:
- * - Listens for order changes in real-time
- * - Processes each eligible order into persistent analytics once
- * - Keeps analytics independent from operational order log cleanup
- * - Initializes analytics structure if needed
- */
-
 import { useEffect } from 'react';
 import { database } from '../lib/firebase';
 import { ref, onValue, off } from 'firebase/database';
@@ -22,18 +8,10 @@ import {
   processOrderAnalytics,
 } from '../lib/analyticsApi';
 
-/**
- * Hook to monitor orders and automatically update analytics
- * Should be called in a component that persists across branch navigation
- * 
- * @param {string} branchId - The branch ID to monitor
- * @param {boolean} enabled - Whether to enable the listener (default: true)
- */
 export function useAnalyticsProcessor(branchId, enabled = true) {
   useEffect(() => {
     if (!branchId || !enabled) return;
 
-    // Initialize analytics structure
     initializeAnalytics(branchId).catch(error => {
       console.error('Failed to initialize analytics:', error);
     });
@@ -74,10 +52,8 @@ export function useAnalyticsProcessor(branchId, enabled = true) {
       }
     };
 
-    // Subscribe to order changes
     onValue(logsRef, handleOrdersChange);
 
-    // Return cleanup function
     return () => {
       off(logsRef, 'value', handleOrdersChange);
     };

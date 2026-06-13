@@ -1,15 +1,3 @@
-/**
- * Analytics Dashboard Page
- *
- * Operations Dashboard
- * - Clean KPI overview
- * - Revenue trends with pure SVG charts
- * - Order activity heatmaps
- * - Product performance rankings
- * - Hidden advanced stats
- * - Floating AI chat head (bottom-right)
- */
-
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -30,14 +18,12 @@ import {
   onAnalyticsChange,
 } from '../lib/analyticsApi';
 
-// Re-using the minimal dashboard loading style
 import styles from '../components/analytics/AnalyticsDashboard.module.css';
 
 export default function AnalyticsDashboard() {
   const { branchId } = useParams();
   const { initialLoading } = useAuth();
 
-  // Enable real-time analytics processing for this branch
   useAnalyticsProcessor(branchId, true);
 
   const [analyticsData, setAnalyticsData] = useState(null);

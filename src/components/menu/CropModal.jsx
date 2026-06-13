@@ -2,13 +2,6 @@ import { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import styles from './MenuPage.module.css';
 
-/**
- * Reusable Crop Modal
- * @param {string} image - The image data URL to crop
- * @param {number} aspect - Aspect ratio (e.g. 1 for square, 16/9 for background)
- * @param {function} onCropComplete - Callback with the final data URL
- * @param {function} onCancel - Callback to close without saving
- */
 export default function CropModal({ image, aspect = 1, onCropComplete, onCancel }) {
     const [crop, setCrop] = useState({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
@@ -74,9 +67,6 @@ export default function CropModal({ image, aspect = 1, onCropComplete, onCancel 
     );
 }
 
-/**
- * Utility to generate the cropped image
- */
 async function getCroppedImg(imageSrc, pixelCrop) {
     const image = await new Promise((resolve, reject) => {
         const img = new Image();
@@ -104,5 +94,5 @@ async function getCroppedImg(imageSrc, pixelCrop) {
         pixelCrop.height
     );
 
-    return canvas.toDataURL('image/jpeg', 0.9); // Use high quality for the crop result
+    return canvas.toDataURL('image/jpeg', 0.9);
 }
