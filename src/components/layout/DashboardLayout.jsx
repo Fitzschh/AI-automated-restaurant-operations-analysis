@@ -1,14 +1,24 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useInventoryProcessor } from '../../hooks/useInventoryProcessor';
+import {
+  formatDateKey,
+  formatWeekKey,
+  formatMonthKey,
+  onAnalyticsChange,
+} from '../../lib/analyticsApi';
+import { onMenuAndInventoryChange } from '../../lib/inventoryApi';
+import AILiveNotificationBar from '../analytics/AIFloatingChat';
+import AIChatHead from '../analytics/AIChatHead';
 import {
   TrendUpIcon,
   InventoryIcon,
   MenuBookIcon,
   LogoutIcon,
   DashboardIcon,
+  BotIcon,
 } from '../analytics/AnalyticsIcons';
 import styles from './DashboardLayout.module.css';
 
@@ -17,12 +27,14 @@ const NAV_ITEMS = [
   { key: 'analytics', label: 'Analytics', icon: TrendUpIcon, pathFn: (b) => `/analytics/${b}` },
   { key: 'inventory', label: 'Inventory', icon: InventoryIcon, pathFn: (b) => `/inventory/${b}` },
   { key: 'menu', label: 'Menu Management', icon: MenuBookIcon, pathFn: (b) => `/menu/${b}` },
+  { key: 'ai-usage', label: 'AI Usage', icon: BotIcon, pathFn: (b) => `/ai-usage/${b}` },
 ];
 
 function getActiveKey(pathname) {
-  if (pathname.includes('/analytics/')) return 'analytics';
+  if (pathname.includes('/analytics/') || pathname.includes('/analytics-history/')) return 'analytics';
   if (pathname.includes('/inventory/')) return 'inventory';
   if (pathname.includes('/menu/') || pathname.includes('/menu-branch')) return 'menu';
+  if (pathname.includes('/ai-usage/')) return 'ai-usage';
   if (pathname.includes('/home/')) return 'home';
   return 'home';
 }
@@ -56,13 +68,58 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
   const branchId = propBranchId || paramBranchId || 'branch1';
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, nickname, logout } = useAuth();
+  const { user, nickname, nicknameLoaded, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [inventoryData, setInventoryData] = useState({});
+  const [inventoryLoaded, setInventoryLoaded] = useState(false);
 
   useInventoryProcessor(branchId, true);
 
   const activeKey = getActiveKey(location.pathname);
+  const currentKeys = useMemo(() => {
+    const now = new Date();
+    return {
+      today: formatDateKey(now),
+      week: formatWeekKey(now),
+      month: formatMonthKey(now),
+    };
+  }, [branchId]);
+
+  useEffect(() => {
+    if (!branchId) return undefined;
+    return onAnalyticsChange(branchId, setAnalyticsData);
+  }, [branchId]);
+
+  useEffect(() => {
+    if (!branchId) return undefined;
+    setInventoryLoaded(false);
+    return onMenuAndInventoryChange(branchId, (data) => {
+      setInventoryData(data);
+      setInventoryLoaded(true);
+    });
+  }, [branchId]);
+
+  const aiAnalyticsData = useMemo(() => {
+    const daily = analyticsData?.daily || {};
+    const weekly = analyticsData?.weekly || {};
+    const monthly = analyticsData?.monthly || {};
+
+    return {
+      summary: analyticsData?.summary || {},
+      products: analyticsData?.products || {},
+      inventory: inventoryData,
+      daily,
+      hourly: analyticsData?.hourly || {},
+      weekly,
+      monthly,
+      statistics: analyticsData?.statistics || {},
+      todayAnalytics: daily?.[currentKeys.today] || { orders: 0, revenue: 0, averageOrderValue: 0 },
+      weekAnalytics: weekly?.[currentKeys.week] || { orders: 0, revenue: 0 },
+      monthAnalytics: monthly?.[currentKeys.month] || { orders: 0, revenue: 0 },
+    };
+  }, [analyticsData, currentKeys, inventoryData]);
 
   const handleNav = useCallback((item) => {
     const path = item.pathFn(branchId);
@@ -124,7 +181,6 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className={styles.nav}>
           <div className={styles.navGroup}>
             <div className={styles.navGroupLabel}>Main</div>
@@ -144,7 +200,6 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
 
 
 
-          {/* Theme Toggle */}
           <div className={styles.navGroup}>
             <div className={styles.navGroupLabel}>Preferences</div>
             <button
@@ -162,7 +217,6 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
           </div>
         </nav>
 
-        {/* Footer */}
         <div className={styles.sidebarFooter}>
           <div className={styles.userRow}>
             <div className={styles.userAvatar}>{initials}</div>
@@ -178,12 +232,24 @@ export default function DashboardLayout({ children, branchId: propBranchId }) {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className={styles.mainArea}>
         <div className={styles.mainContent}>
           {children}
         </div>
       </main>
+
+      {!location.pathname.includes('/menu/') && !location.pathname.includes('/menu-branch') && (
+        <>
+          <AILiveNotificationBar
+            analyticsData={aiAnalyticsData}
+            branchId={branchId}
+            managerNickname={nickname}
+            nicknameLoaded={nicknameLoaded}
+            inventoryLoaded={inventoryLoaded}
+          />
+          <AIChatHead analyticsData={aiAnalyticsData} branchId={branchId} />
+        </>
+      )}
     </div>
   );
 }

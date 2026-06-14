@@ -5,7 +5,9 @@ import MenuPage from './pages/MenuPage';
 import AdminHomePage from './pages/AdminHomePage';
 import BranchHomePage from './pages/BranchHomePage';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
+import AnalyticsHistoryPage from './pages/AnalyticsHistoryPage';
 import InventoryPage from './pages/InventoryPage';
+import AIUsagePage from './pages/AIUsagePage';
 import { canAccessBranch, isUserAdmin } from './config/authConfig';
 
 function ProtectedRoute({ children, adminOnly = false, branchId: staticBranchId }) {
@@ -85,6 +87,14 @@ export default function App() {
           }
         />
         <Route
+          path="/analytics-history/:branchId"
+          element={
+            <ProtectedRoute>
+              <AnalyticsHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/menu-branch1"
           element={
             <ProtectedRoute branchId="branch1">
@@ -105,6 +115,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <InventoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai-usage/:branchId"
+          element={
+            <ProtectedRoute>
+              <AIUsagePage />
             </ProtectedRoute>
           }
         />

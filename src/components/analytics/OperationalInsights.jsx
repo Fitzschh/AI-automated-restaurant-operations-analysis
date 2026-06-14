@@ -1,4 +1,4 @@
-import { BrainIcon } from './AnalyticsIcons';
+import { BotIcon } from './AnalyticsIcons';
 import styles from './AnalyticsSections.module.css';
 
 export default function OperationalInsights() {
@@ -38,18 +38,17 @@ export default function OperationalInsights() {
             flexShrink: 0
           }}
         >
-          <BrainIcon size={32} />
+          <BotIcon size={32} />
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 6px 0' }}>
-            Operations AI Assistant
+            Live Operations AI
           </h3>
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            To get personalized recommendations, real-time demand forecasting, inventory alerts, and actionable upselling recommendations, tap the **AI Assistant** bubble in the bottom right corner of your screen.
+            AI shift handoffs and hourly operational feedback now appear automatically in the live panel at the bottom of the workspace.
           </p>
         </div>
       </div>
     </section>
   );
 }
-

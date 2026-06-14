@@ -1,10 +1,308 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateAIAnalysis, clearAnalysisCache } from '../../lib/aiAnalystService';
-import { BrainIcon, RefreshIcon } from './AnalyticsIcons';
+import { BotIcon } from './AnalyticsIcons';
 import styles from './AIFloatingChat.module.css';
+
+const DAILY_BRIEFING_DELAY_MS = 30 * 1000;
+const FIRST_LIVE_REPORT_DELAY_MS = 30 * 1000;
+const PREPARING_BRIEFING_MIN_MS = 5 * 1000;
+const DAILY_BRIEFING_CACHE_VERSION = 'v3';
+
+function formatAsOfLabel(date) {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function getHourlyReportKey(branchId, date) {
+  const day = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+  const hour = String(date.getHours()).padStart(2, '0');
+  return `ai_live_feed_${branchId}_${day}_${hour}`;
+}
+
+function getDailyBriefingKey(branchId, date = new Date()) {
+  const day = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+  return `ai_daily_briefing_${DAILY_BRIEFING_CACHE_VERSION}_${branchId}_${day}`;
+}
+
+function getDailyBriefingSessionKey(branchId, date = new Date()) {
+  return `${getDailyBriefingKey(branchId, date)}_shown_this_session`;
+}
+
+function getTimeOfDayLabel(date = new Date()) {
+  const hour = date.getHours();
+
+  if (hour >= 5 && hour < 11) return 'Morning';
+  if (hour >= 11 && hour < 13) return 'Noon';
+  if (hour >= 13 && hour < 18) return 'Afternoon';
+  return 'Evening';
+}
+
+function formatBranchLabel(branchId) {
+  const match = String(branchId || '').match(/^branch(\d+)$/i);
+  if (match) return `Branch ${match[1]}`;
+  return String(branchId || 'this branch')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function createPreparingBriefing(managerNickname, branchLabel) {
+  const displayName = managerNickname?.trim() || 'Manager';
+  const timeOfDay = getTimeOfDayLabel();
+
+  return {
+    mode: 'briefing-preparing',
+    generatedAt: new Date().toISOString(),
+    greeting: `Good ${timeOfDay}, ${displayName}.`,
+    branchWelcome: `Welcome to ${branchLabel}.`,
+    message: 'I am preparing your AI Shift Handoff from the latest branch data.',
+  };
+}
+
+function clearStoredLiveFeedCache(branchId) {
+  try {
+    const prefix = `ai_live_feed_${branchId}_`;
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(prefix))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch {
+  }
+}
 
 function AnalysisMessages({ analysis }) {
   if (!analysis) return null;
+
+  if (analysis.mode === 'briefing-preparing') {
+    return (
+      <div className={`${styles.messageBubble} ${styles.ai} ${styles.preparingBubble}`}>
+        <div className={styles.quickHeader}>
+          <span className={styles.aiBullet} />
+          <span>AI Shift Handoff</span>
+        </div>
+        {analysis.greeting && (
+          <p className={styles.handoffGreeting}>{analysis.greeting}</p>
+        )}
+        {analysis.branchWelcome && (
+          <p className={styles.handoffWelcome}>{analysis.branchWelcome}</p>
+        )}
+        <p className={styles.aiSectionText}>{analysis.message}</p>
+        <div className={styles.inlineLoadingDots} aria-hidden="true">
+          <span className={styles.loadingDot} />
+          <span className={styles.loadingDot} />
+          <span className={styles.loadingDot} />
+        </div>
+      </div>
+    );
+  }
+
+  if (analysis.mode === 'briefing') {
+    const handoff = analysis.shiftHandoff || {};
+    const highPriority = handoff.recommendation || analysis.recommendedActions?.high?.[0];
+    const riskText = Array.isArray(handoff.inventoryRisks)
+      ? handoff.inventoryRisks.join(' ')
+      : handoff.inventoryRisks;
+    const handoffRows = [
+      ['Yesterday Revenue', handoff.yesterdayRevenue],
+      ['Top Product', handoff.topProduct],
+      ['Fastest Growing Product', handoff.fastestGrowingProduct],
+      ['Inventory Risks', riskText],
+      ['Operational Insight', handoff.operationalInsight],
+      ['Recommendation', highPriority],
+      ['Potential Revenue Opportunity', handoff.potentialRevenueOpportunity],
+    ].filter(([, value]) => value);
+
+    return (
+      <>
+        <div className={`${styles.messageBubble} ${styles.ai} ${styles.briefingBubble}`}>
+          <div className={styles.quickHeader}>
+            <span className={styles.aiBullet} />
+            <span>AI Shift Handoff</span>
+          </div>
+          {(analysis.greeting || analysis.branchWelcome) && (
+            <div className={styles.handoffIntro}>
+              {analysis.greeting && <p className={styles.handoffGreeting}>{analysis.greeting}</p>}
+              {analysis.branchWelcome && <p className={styles.handoffWelcome}>{analysis.branchWelcome}</p>}
+            </div>
+          )}
+          {handoffRows.length > 0 ? (
+            <div className={styles.handoffGrid}>
+              {handoffRows.map(([label, value]) => (
+                <div key={label} className={styles.handoffMetric}>
+                  <span className={styles.handoffLabel}>{label}</span>
+                  <span className={styles.handoffValue}>{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : analysis.executiveSummary && (
+            <p className={styles.aiSectionText}>{analysis.executiveSummary}</p>
+          )}
+          {analysis.confidenceScore !== undefined && (
+            <p className={styles.confidenceLine}>Confidence {analysis.confidenceScore}%</p>
+          )}
+        </div>
+
+        {analysis.generatedAt && (
+          <div className={styles.messageTime}>
+            {analysis.fromCache ? 'Cached handoff' : 'Fresh handoff'} — {new Date(analysis.generatedAt).toLocaleTimeString()}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (analysis.mode === 'deep') {
+    const sections = [
+      { title: 'Revenue Performance', data: analysis.revenuePerformance },
+      { title: 'Product Performance', data: analysis.productPerformance },
+      { title: 'Inventory Analysis', data: analysis.inventoryAnalysis },
+      { title: 'Peak Hour Analysis', data: analysis.peakHourAnalysis },
+    ];
+
+    return (
+      <>
+        {sections.map((section, i) => (
+          <div
+            key={section.title}
+            className={`${styles.messageBubble} ${styles.ai}`}
+            style={{ animationDelay: `${i * 0.08}s` }}
+          >
+            <div className={styles.aiSection}>
+              <h4 className={styles.aiSectionTitle}>{section.title}</h4>
+            </div>
+            {section.data?.summary && (
+              <p className={styles.aiSectionText}>{section.data.summary}</p>
+            )}
+            {['insights', 'anomalies', 'topSelling', 'worstPerforming', 'fastestGrowing', 'decliningDemand', 'stockOutRisks', 'restockRecommendations', 'busiestHours', 'slowestHours', 'recommendations'].map((key) => (
+              Array.isArray(section.data?.[key]) && section.data[key].length > 0 ? (
+                <ul key={key} className={styles.aiList}>
+                  {section.data[key].map((item, j) => (
+                    <li key={`${key}-${j}`} className={styles.aiListItem}>
+                      <span className={styles.aiBullet} />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null
+            ))}
+          </div>
+        ))}
+
+        {analysis.operationalRecommendations && (
+          <div className={`${styles.messageBubble} ${styles.ai}`}>
+            <div className={styles.aiSection}>
+              <h4 className={styles.aiSectionTitle}>Operational Recommendations</h4>
+            </div>
+            {[
+              ['HIGH', analysis.operationalRecommendations.high, styles.priorityHigh],
+              ['MEDIUM', analysis.operationalRecommendations.medium, styles.priorityMedium],
+              ['LOW', analysis.operationalRecommendations.low, styles.priorityLow],
+            ].map(([label, items, priorityClass]) => (
+              Array.isArray(items) && items.length > 0 ? (
+                <div key={label} className={styles.priorityGroup}>
+                  <p className={styles.priorityLabel}>{label}</p>
+                  <ul className={styles.aiList}>
+                    {items.map((item, i) => (
+                      <li key={`${label}-${i}`} className={styles.aiListItem}>
+                        <span className={`${styles.aiBullet} ${priorityClass}`} />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null
+            ))}
+          </div>
+        )}
+
+        {analysis.executiveSummary && (
+          <div className={`${styles.messageBubble} ${styles.ai}`}>
+            <div className={styles.aiSection}>
+              <h4 className={styles.aiSectionTitle}>Executive Summary</h4>
+            </div>
+            <p className={styles.aiSectionText}>{analysis.executiveSummary}</p>
+          </div>
+        )}
+
+        {analysis.generatedAt && (
+          <div className={styles.messageTime}>
+            {analysis.fromCache ? 'Cached report' : 'Fresh report'} — {new Date(analysis.generatedAt).toLocaleTimeString()}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (analysis.insight) {
+    const priorityClass =
+      analysis.insight.priority === 'HIGH' ? styles.priorityHigh :
+      analysis.insight.priority === 'MEDIUM' ? styles.priorityMedium :
+      analysis.insight.priority === 'LOW' ? styles.priorityLow : '';
+    const freshnessLabel = analysis.mode === 'live' ? 'live update' : 'insight';
+
+    return (
+      <>
+        <div className={`${styles.messageBubble} ${styles.ai} ${styles.quickInsight}`}>
+          <div className={styles.quickHeader}>
+            <span className={`${styles.aiBullet} ${priorityClass}`} />
+            <span>{analysis.insight.priority || 'Quick Read'}</span>
+          </div>
+          {analysis.insight.message && (
+            <p className={styles.aiSectionText}>{analysis.insight.message}</p>
+          )}
+          {analysis.insight.action && (
+            <p className={styles.quickAction}>
+              <span className={styles.actionLabel}>Action:</span> {analysis.insight.action}
+            </p>
+          )}
+        </div>
+
+        {analysis.generatedAt && (
+          <div className={styles.messageTime}>
+            {analysis.fromCache ? `Cached ${freshnessLabel}` : `Fresh ${freshnessLabel}`} — {new Date(analysis.generatedAt).toLocaleTimeString()}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (Array.isArray(analysis.notifications) && analysis.notifications.length > 0) {
+    const notification = analysis.notifications[0];
+    const priorityClass =
+      notification.priority === 'HIGH' ? styles.priorityHigh :
+      notification.priority === 'MEDIUM' ? styles.priorityMedium :
+      notification.priority === 'LOW' ? styles.priorityLow : '';
+
+    return (
+      <>
+        <div className={`${styles.messageBubble} ${styles.ai} ${styles.quickInsight}`}>
+          <div className={styles.quickHeader}>
+            <span className={`${styles.aiBullet} ${priorityClass}`} />
+            <span>{notification.priority || 'Quick Read'}</span>
+          </div>
+          <p className={styles.aiSectionText}>
+            {[notification.whatHappened, notification.whyItMatters].filter(Boolean).join(' ')}
+          </p>
+          {notification.recommendedAction && (
+            <p className={styles.quickAction}>
+              <span className={styles.actionLabel}>Action:</span> {notification.recommendedAction}
+            </p>
+          )}
+        </div>
+
+        {analysis.generatedAt && (
+          <div className={styles.messageTime}>
+            {analysis.fromCache ? 'Cached insight' : 'Fresh insight'} — {new Date(analysis.generatedAt).toLocaleTimeString()}
+          </div>
+        )}
+      </>
+    );
+  }
 
   const sections = [];
 
@@ -93,51 +391,230 @@ function AnalysisMessages({ analysis }) {
   );
 }
 
-export default function AIFloatingChat({ analyticsData, branchId }) {
-  const [open, setOpen] = useState(false);
-  const [analysis, setAnalysis] = useState(null);
+export default function AILiveNotificationBar({
+  analyticsData,
+  branchId,
+  managerNickname,
+  nicknameLoaded = true,
+  inventoryLoaded = true,
+}) {
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [feedItems, setFeedItems] = useState([]);
+  const [preparingBriefing, setPreparingBriefing] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [hasAutoTriggered, setHasAutoTriggered] = useState(false);
+  const [briefingComplete, setBriefingComplete] = useState(false);
   const bodyRef = useRef(null);
   const analyticsSignatureRef = useRef('');
+  const generatingRef = useRef(false);
+  const liveReportInFlightRef = useRef(false);
+  const briefingInFlightRef = useRef(false);
+  const preparingBriefingTokenRef = useRef('');
+  const preparingBriefingVisibleUntilRef = useRef(0);
+  const notificationTimerRef = useRef(null);
+  const latestFeedItem = feedItems[feedItems.length - 1] || null;
+  const analysis = preparingBriefing || latestFeedItem;
+  const hasData = analyticsData?.summary?.totalOrders > 0;
+  const panelVisible = notificationOpen;
+  const branchLabel = formatBranchLabel(branchId);
 
   useEffect(() => {
     if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+      bodyRef.current.scrollTop = 0;
     }
-  }, [analysis, generating]);
+  }, [feedItems, generating, preparingBriefing]);
 
-  const handleGenerate = useCallback(async (forceRefresh = false) => {
-    if (generating) return;
+  useEffect(() => () => {
+    if (notificationTimerRef.current) {
+      clearTimeout(notificationTimerRef.current);
+    }
+  }, []);
+
+  const showNotification = useCallback((durationMs = 15 * 1000) => {
+    setNotificationOpen(true);
+
+    if (notificationTimerRef.current) {
+      clearTimeout(notificationTimerRef.current);
+      notificationTimerRef.current = null;
+    }
+
+    if (durationMs === null) {
+      return;
+    }
+
+    notificationTimerRef.current = setTimeout(() => {
+      setNotificationOpen(false);
+      notificationTimerRef.current = null;
+    }, durationMs);
+  }, []);
+
+  const showPreparingBriefing = useCallback(() => {
+    const loginToken = sessionStorage.getItem('ai_daily_briefing_pending_at') || 'current-session';
+    if (preparingBriefingTokenRef.current === loginToken) return;
+
+    const now = Date.now();
+    preparingBriefingTokenRef.current = loginToken;
+    preparingBriefingVisibleUntilRef.current = now + PREPARING_BRIEFING_MIN_MS;
+    setError(null);
+    setPreparingBriefing(createPreparingBriefing(managerNickname, branchLabel));
+    showNotification(null);
+  }, [branchLabel, managerNickname, showNotification]);
+
+  const waitForPreparingBriefingMinimum = useCallback(async () => {
+    const visibleUntil = preparingBriefingVisibleUntilRef.current;
+    if (!visibleUntil) return;
+
+    const remaining = visibleUntil - Date.now();
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
+  }, []);
+
+  const handleGenerate = useCallback(async (mode = 'realtime', forceRefresh = false, reportContext = null, revealNotification = true) => {
+    if (generatingRef.current) return null;
+    generatingRef.current = true;
     setGenerating(true);
     setError(null);
 
     try {
       if (forceRefresh) {
-        clearAnalysisCache(branchId);
+        clearAnalysisCache(branchId, mode);
       }
-      const result = await generateAIAnalysis(analyticsData, branchId, forceRefresh);
-      setAnalysis(result);
+      const payload = reportContext
+        ? { ...analyticsData, reportContext }
+        : analyticsData;
+      const result = await generateAIAnalysis(payload, branchId, forceRefresh, mode);
+      if (mode === 'briefing') {
+        await waitForPreparingBriefingMinimum();
+        setPreparingBriefing(null);
+      }
+      setFeedItems((items) => [
+        ...items.filter((item) => item.mode !== 'briefing-preparing'),
+        result,
+      ].slice(-12));
+      if (revealNotification) {
+        showNotification();
+      }
+      return result;
     } catch (err) {
-      console.error('[AI Chat] Generation failed:', err);
+      console.error('[AI Live Notifications] Generation failed:', err);
+      if (mode === 'briefing') {
+        await waitForPreparingBriefingMinimum();
+        setPreparingBriefing(null);
+      }
       setError(err.message || 'Analysis failed. Please try again.');
+      if (mode === 'briefing') {
+        setFeedItems((items) => items.filter((item) => item.mode !== 'briefing-preparing'));
+      }
+      if (revealNotification) {
+        showNotification();
+      }
     } finally {
+      generatingRef.current = false;
       setGenerating(false);
     }
-  }, [analyticsData, branchId, generating]);
+  }, [analyticsData, branchId, showNotification, waitForPreparingBriefingMinimum]);
 
-  const handleToggle = useCallback(() => {
-    const willOpen = !open;
-    setOpen(willOpen);
+  const generateDailyBriefing = useCallback(async () => {
+    if (!branchId || !hasData || briefingInFlightRef.current) return;
 
-    if (willOpen && !analysis && !hasAutoTriggered && !generating) {
-      setHasAutoTriggered(true);
-      setTimeout(() => handleGenerate(false), 300);
+    const key = getDailyBriefingKey(branchId);
+    const sessionKey = getDailyBriefingSessionKey(branchId);
+    const pendingLoginBriefing = sessionStorage.getItem('ai_daily_briefing_pending') === '1';
+    const alreadyShown = sessionStorage.getItem(sessionKey) === '1';
+
+    if (!pendingLoginBriefing && alreadyShown) {
+      setBriefingComplete(true);
+      return;
     }
-  }, [open, analysis, hasAutoTriggered, generating, handleGenerate]);
 
-  const hasData = analyticsData?.summary?.totalOrders > 0;
+    const savedBriefing = pendingLoginBriefing ? null : sessionStorage.getItem(key);
+    if (savedBriefing) {
+      try {
+        const parsed = JSON.parse(savedBriefing);
+        if (parsed?.generatedAt) {
+          await waitForPreparingBriefingMinimum();
+          setPreparingBriefing(null);
+          setFeedItems((items) => [
+            ...items.filter((item) => (
+              item.mode !== 'briefing-preparing' &&
+              item.generatedAt !== parsed.generatedAt
+            )),
+            parsed,
+          ].slice(-12));
+          showNotification();
+          sessionStorage.setItem(sessionKey, '1');
+          sessionStorage.removeItem('ai_daily_briefing_pending');
+          sessionStorage.removeItem('ai_daily_briefing_pending_at');
+          setBriefingComplete(true);
+          return;
+        }
+      } catch {
+        sessionStorage.removeItem(key);
+      }
+    }
+
+    briefingInFlightRef.current = true;
+    try {
+      const result = await handleGenerate('briefing', true, {
+        asOfLabel: 'AI Shift Handoff',
+        branchLabel,
+        managerNickname: managerNickname?.trim() || 'Manager',
+        timeOfDayLabel: getTimeOfDayLabel(),
+        generatedFor: new Date().toISOString(),
+      });
+      if (result) {
+        sessionStorage.setItem(key, JSON.stringify(result));
+        sessionStorage.setItem(sessionKey, '1');
+        sessionStorage.removeItem('ai_daily_briefing_pending');
+        sessionStorage.removeItem('ai_daily_briefing_pending_at');
+      }
+    } finally {
+      briefingInFlightRef.current = false;
+      setBriefingComplete(true);
+    }
+  }, [branchId, branchLabel, handleGenerate, hasData, managerNickname, showNotification, waitForPreparingBriefingMinimum]);
+
+  const generateLiveReport = useCallback(async (date) => {
+    if (!branchId || !hasData || liveReportInFlightRef.current) return;
+
+    const hour = date.getHours();
+    if (hour < 7) return;
+
+    const key = getHourlyReportKey(branchId, date);
+    const savedReport = localStorage.getItem(key);
+    if (savedReport) {
+      try {
+        const parsed = JSON.parse(savedReport);
+        if (parsed?.generatedAt) {
+          setFeedItems((items) => (
+            items.some((item) => item.generatedAt === parsed.generatedAt)
+              ? items
+              : [...items, parsed].slice(-12)
+          ));
+          showNotification();
+          return;
+        }
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
+
+    liveReportInFlightRef.current = true;
+    try {
+      const result = await handleGenerate('live', true, {
+        asOfLabel: formatAsOfLabel(date),
+        scheduledHour: hour,
+        generatedFor: date.toISOString(),
+      });
+      if (result) {
+        localStorage.setItem(key, JSON.stringify(result));
+      }
+    } finally {
+      liveReportInFlightRef.current = false;
+    }
+  }, [branchId, handleGenerate, hasData, showNotification]);
+
   const analyticsSignature = JSON.stringify({
     summary: analyticsData?.summary || {},
     products: analyticsData?.products || {},
@@ -145,6 +622,7 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
     hourly: analyticsData?.hourly || {},
     weekly: analyticsData?.weekly || {},
     monthly: analyticsData?.monthly || {},
+    inventory: analyticsData?.inventory || {},
   });
 
   useEffect(() => {
@@ -159,39 +637,96 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
 
     analyticsSignatureRef.current = analyticsSignature;
     clearAnalysisCache(branchId);
-    setHasAutoTriggered(false);
+    sessionStorage.removeItem(getDailyBriefingKey(branchId));
+    sessionStorage.removeItem(getDailyBriefingSessionKey(branchId));
+    clearStoredLiveFeedCache(branchId);
 
-    if (open && analysis && hasData && !generating) {
-      handleGenerate(true);
-    } else if (!open || !hasData) {
-      setAnalysis(null);
+    if (!notificationOpen || !hasData) {
+      setFeedItems([]);
     }
-  }, [analyticsSignature, branchId, open, analysis, hasData, generating, handleGenerate]);
+  }, [analyticsSignature, branchId, notificationOpen, hasData]);
+
+  useEffect(() => {
+    if (!branchId) return;
+
+    const pendingLoginBriefing = sessionStorage.getItem('ai_daily_briefing_pending') === '1';
+    const alreadyShown = sessionStorage.getItem(getDailyBriefingSessionKey(branchId)) === '1';
+    const shouldPrepareBriefing = pendingLoginBriefing || !alreadyShown;
+
+    if (shouldPrepareBriefing && !nicknameLoaded) {
+      return;
+    }
+
+    if (shouldPrepareBriefing) {
+      showPreparingBriefing();
+    }
+
+    if (!hasData || !inventoryLoaded) return;
+
+    if (!pendingLoginBriefing && alreadyShown) {
+      setBriefingComplete(true);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      generateDailyBriefing();
+    }, shouldPrepareBriefing ? PREPARING_BRIEFING_MIN_MS : DAILY_BRIEFING_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [branchId, generateDailyBriefing, hasData, inventoryLoaded, nicknameLoaded, showPreparingBriefing]);
+
+  useEffect(() => {
+    if (!branchId || !hasData || !briefingComplete) return;
+
+    let hourlyTimer = null;
+
+    function scheduleNextClockHourReport() {
+      const now = new Date();
+      const nextHour = new Date(now);
+      nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+
+      hourlyTimer = setTimeout(async () => {
+        await generateLiveReport(new Date());
+        scheduleNextClockHourReport();
+      }, nextHour.getTime() - now.getTime());
+    }
+
+    const firstReportTimer = setTimeout(async () => {
+      await generateLiveReport(new Date());
+      scheduleNextClockHourReport();
+    }, FIRST_LIVE_REPORT_DELAY_MS);
+
+    return () => {
+      clearTimeout(firstReportTimer);
+      if (hourlyTimer) clearTimeout(hourlyTimer);
+    };
+  }, [branchId, briefingComplete, generateLiveReport, hasData]);
 
   return (
-    <>
-      <button
-        className={`${styles.chatHead} ${open ? styles.active : ''}`}
-        onClick={handleToggle}
-        aria-label={open ? 'Close AI Analyst' : 'Open AI Analyst'}
-        title="AI Operations Analyst"
-      >
-        <BrainIcon size={24} />
-      </button>
-
-      <div className={`${styles.chatPanel} ${open ? styles.open : ''}`}>
+    <div aria-live="polite">
+      <div className={`${styles.chatPanel} ${panelVisible ? styles.open : ''}`}>
         <div className={styles.panelHeader}>
           <div className={styles.panelAvatar}>
-            <BrainIcon size={18} />
+            <BotIcon size={18} />
           </div>
           <div className={styles.panelInfo}>
-            <p className={styles.panelName}>AI Operations Analyst</p>
+            <p className={styles.panelName}>Live Operations AI</p>
             <p className={styles.panelStatus}>
               <span className={styles.statusDot} />
-              Ready to help
+              {analysis?.mode === 'briefing-preparing' ? 'Preparing shift handoff' : analysis?.mode === 'briefing' ? 'Shift handoff ready' : analysis?.mode === 'live' ? 'AI Live Operations Feed active' : 'Listening for operations changes'}
             </p>
           </div>
-          <button className={styles.closeBtn} onClick={() => setOpen(false)} aria-label="Close">
+          <button
+            className={styles.closeBtn}
+            onClick={() => {
+              setNotificationOpen(false);
+              if (notificationTimerRef.current) {
+                clearTimeout(notificationTimerRef.current);
+                notificationTimerRef.current = null;
+              }
+            }}
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
@@ -200,7 +735,7 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
           {!hasData && !analysis && !generating && (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>
-                <BrainIcon size={40} />
+                <BotIcon size={40} />
               </div>
               <h3 className={styles.emptyTitle}>No Data Yet</h3>
               <p className={styles.emptyText}>
@@ -212,11 +747,11 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
 
           {hasData && !analysis && !generating && !error && (
             <div className={`${styles.messageBubble} ${styles.system}`}>
-              Tap the button below to get your operations report.
+              Live Operations AI is ready. Shift handoffs and hourly updates will appear here.
             </div>
           )}
 
-          {generating && (
+          {generating && analysis?.mode !== 'briefing-preparing' && (
             <div className={styles.loadingDots}>
               <span className={styles.loadingDot} />
               <span className={styles.loadingDot} />
@@ -232,26 +767,9 @@ export default function AIFloatingChat({ analyticsData, branchId }) {
             </div>
           )}
 
-          {analysis && !generating && (
-            <AnalysisMessages analysis={analysis} />
-          )}
+          {analysis && <AnalysisMessages analysis={analysis} />}
         </div>
-
-        {hasData && (
-          <div className={styles.panelFooter}>
-            <button
-              className={styles.refreshBtn}
-              onClick={() => handleGenerate(analysis !== null)}
-              disabled={generating}
-            >
-              <span className={`${styles.refreshIcon} ${generating ? styles.spinning : ''}`}>
-                <RefreshIcon size={14} />
-              </span>
-              {generating ? 'Analyzing...' : analysis ? 'Refresh Analysis' : 'Analyze Now'}
-            </button>
-          </div>
-        )}
       </div>
-    </>
+    </div>
   );
 }

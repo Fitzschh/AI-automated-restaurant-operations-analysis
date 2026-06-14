@@ -6,6 +6,9 @@ import { loadUserNickname, saveUserNickname } from '../lib/menuApi';
 const AuthContext = createContext(null);
 
 const AUTH_KEY = 'e-menu-user';
+const AI_BRIEFING_PENDING_KEY = 'ai_daily_briefing_pending';
+const AI_BRIEFING_PENDING_AT_KEY = 'ai_daily_briefing_pending_at';
+const AI_AUTH_SESSION_UID_KEY = 'ai_auth_session_uid';
 
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
@@ -18,6 +21,7 @@ setPersistence(auth, browserLocalPersistence)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [nickname, setNickname] = useState('');
+  const [nicknameLoaded, setNicknameLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,6 +30,8 @@ export function AuthProvider({ children }) {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       try {
         if (firebaseUser) {
+          setNicknameLoaded(false);
+          setNickname('');
           const userData = {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -33,18 +39,31 @@ export function AuthProvider({ children }) {
           setUser(userData);
           localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
 
+          const activeSessionUid = sessionStorage.getItem(AI_AUTH_SESSION_UID_KEY);
+          if (activeSessionUid !== firebaseUser.uid && sessionStorage.getItem(AI_BRIEFING_PENDING_KEY) !== '1') {
+            sessionStorage.setItem(AI_BRIEFING_PENDING_KEY, '1');
+            sessionStorage.setItem(AI_BRIEFING_PENDING_AT_KEY, String(Date.now()));
+          }
+          sessionStorage.setItem(AI_AUTH_SESSION_UID_KEY, firebaseUser.uid);
+
           const userNickname = await loadUserNickname(firebaseUser.uid);
-          setNickname(userNickname);
+          setNickname(userNickname || '');
+          setNicknameLoaded(true);
 
           console.log("User is logged in:", firebaseUser.email);
         } else {
           setUser(null);
           setNickname('');
+          setNicknameLoaded(false);
           localStorage.removeItem(AUTH_KEY);
+          sessionStorage.removeItem(AI_AUTH_SESSION_UID_KEY);
+          sessionStorage.removeItem(AI_BRIEFING_PENDING_KEY);
+          sessionStorage.removeItem(AI_BRIEFING_PENDING_AT_KEY);
           console.log("User not logged in");
         }
       } catch (err) {
         console.error('Auth state change error:', err);
+        setNicknameLoaded(true);
       } finally {
         setInitialLoading(false);
       }
@@ -56,10 +75,14 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     setLoading(true);
     setError(null);
+    sessionStorage.setItem(AI_BRIEFING_PENDING_KEY, '1');
+    sessionStorage.setItem(AI_BRIEFING_PENDING_AT_KEY, String(Date.now()));
     try {
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (err) {
+      sessionStorage.removeItem(AI_BRIEFING_PENDING_KEY);
+      sessionStorage.removeItem(AI_BRIEFING_PENDING_AT_KEY);
       setError(err.message);
       return false;
     } finally {
@@ -82,6 +105,9 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     setLoading(true);
     try {
+      sessionStorage.removeItem(AI_AUTH_SESSION_UID_KEY);
+      sessionStorage.removeItem(AI_BRIEFING_PENDING_KEY);
+      sessionStorage.removeItem(AI_BRIEFING_PENDING_AT_KEY);
       await signOut(auth);
     } catch (err) {
       setError(err.message);
@@ -130,6 +156,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user,
       nickname,
+      nicknameLoaded,
       updateNickname,
       changePassword,
       login,

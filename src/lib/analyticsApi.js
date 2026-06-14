@@ -164,6 +164,7 @@ function getItemId(item) {
 
 export function isAnalyticsOrder(orderData) {
   if (!orderData || typeof orderData !== 'object') return false;
+  if (orderData.analyticsExcluded === true) return false;
   const status = String(orderData.status || '').toLowerCase();
   if (['cancelled', 'canceled', 'void', 'voided', 'refunded', 'deleted'].includes(status)) {
     return false;
@@ -233,6 +234,48 @@ function applyOrderToAnalytics(analytics, orderData) {
     analytics.products[itemId].revenue = Number((Number(analytics.products[itemId].revenue || 0) + subtotal).toFixed(2));
     analytics.products[itemId].orderCount = Number(analytics.products[itemId].orderCount || 0) + 1;
   }
+}
+
+function buildAnalyticsFromLogs(logsData = {}) {
+  const analytics = createEmptyAnalytics();
+  const now = new Date().toISOString();
+  const orders = Object.entries(logsData || {})
+    .filter(([, orderData]) => isAnalyticsOrder(orderData))
+    .sort(([, a], [, b]) => getOrderDate(a) - getOrderDate(b));
+
+  for (const [orderId, orderData] of orders) {
+    const items = getOrderItems(orderData);
+    const orderDate = getOrderDate(orderData);
+    applyOrderToAnalytics(analytics, orderData);
+    analytics.processedOrders[orderId] = {
+      orderId,
+      processedAt: orderData.analyticsProcessedAt || now,
+      orderDate: orderDate.toISOString(),
+      total: Number(getOrderTotal(orderData, items).toFixed(2)),
+      rebuiltFromLogs: true,
+    };
+  }
+
+  analytics.meta = {
+    ...(analytics.meta || {}),
+    processedOrderLedgerInitialized: true,
+    processedOrderLedgerInitializedAt: analytics.meta?.processedOrderLedgerInitializedAt || now,
+    lastRebuiltAt: now,
+  };
+
+  return updateDerivedAnalytics(analytics);
+}
+
+async function getRecordedOrdersData(branchId) {
+  const [logsSnapshot, deletedLogsSnapshot] = await Promise.all([
+    get(ref(database, `${branchId}/logs`)),
+    get(ref(database, `${branchId}/deletedLogs`)),
+  ]);
+
+  return {
+    ...(deletedLogsSnapshot.val() || {}),
+    ...(logsSnapshot.val() || {}),
+  };
 }
 
 function normalizeAnalytics(current) {
@@ -426,6 +469,49 @@ export async function processOrderAnalytics(branchId, orderId, orderData) {
     console.error('Error processing order analytics:', error);
     throw error;
   }
+}
+
+export async function rebuildAnalyticsFromLogs(branchId, logsData = null) {
+  if (!branchId) return;
+
+  const logs = logsData || await getRecordedOrdersData(branchId);
+  const analytics = buildAnalyticsFromLogs(logs);
+  await set(ref(database, analyticsPath(branchId)), analytics);
+}
+
+export async function excludeOrderFromAnalytics(branchId, orderId, reason = 'Manual analytics correction') {
+  if (!branchId || !orderId) return;
+
+  const now = new Date().toISOString();
+  const activeOrderSnapshot = await get(ref(database, `${branchId}/logs/${orderId}`));
+  const orderPath = activeOrderSnapshot.exists()
+    ? `${branchId}/logs/${orderId}`
+    : `${branchId}/deletedLogs/${orderId}`;
+  const orderRef = ref(database, orderPath);
+  await update(orderRef, {
+    analyticsExcluded: true,
+    analyticsExcludedAt: now,
+    analyticsExcludedReason: reason || 'Manual analytics correction',
+  });
+
+  await rebuildAnalyticsFromLogs(branchId);
+}
+
+export async function includeOrderInAnalytics(branchId, orderId) {
+  if (!branchId || !orderId) return;
+
+  const activeOrderSnapshot = await get(ref(database, `${branchId}/logs/${orderId}`));
+  const orderPath = activeOrderSnapshot.exists()
+    ? `${branchId}/logs/${orderId}`
+    : `${branchId}/deletedLogs/${orderId}`;
+  const orderRef = ref(database, orderPath);
+  await update(orderRef, {
+    analyticsExcluded: false,
+    analyticsExcludedAt: null,
+    analyticsExcludedReason: null,
+  });
+
+  await rebuildAnalyticsFromLogs(branchId);
 }
 
 /**

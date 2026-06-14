@@ -19,26 +19,22 @@ export default function BranchHomePage() {
     const { user, nickname, updateNickname, changePassword, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     
-    // Enable real-time analytics processing for this branch
     useAnalyticsProcessor(branchId, true);
 
     const [appSettings, setAppSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
 
-    // Order logs state
     const [logs, setLogs] = useState([]);
     const [logsLoading, setLogsLoading] = useState(true);
     const [selectedLog, setSelectedLog] = useState(null);
 
-    // Trash bin state
     const [deletedLogs, setDeletedLogs] = useState([]);
     const [isTrashOpen, setIsTrashOpen] = useState(false);
     const [clearingTrash, setClearingTrash] = useState(false);
 
     const [localNickname, setLocalNickname] = useState('');
 
-    // Settings form state
     const [showSettings, setShowSettings] = useState(false);
     const [nicknameInput, setNicknameInput] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -68,7 +64,6 @@ export default function BranchHomePage() {
         load();
     }, [branchId]);
 
-    // Real-time listener for order logs
     useEffect(() => {
         if (!branchId) return;
         setLogsLoading(true);
@@ -79,7 +74,6 @@ export default function BranchHomePage() {
         return unsubscribe;
     }, [branchId]);
 
-    // Real-time listener for deleted logs
     useEffect(() => {
         if (!branchId) return;
         const unsubscribe = onDeletedLogsChange(branchId, (data) => {
@@ -158,7 +152,6 @@ export default function BranchHomePage() {
 
     const branchName = AUTH_CONFIG.branches[branchId]?.name || branchId;
 
-    /* Shared inline styles for settings cards */
     const cardStyle = {
         background: 'var(--color-bg-card)',
         border: '1px solid var(--color-border)',
@@ -223,12 +216,10 @@ export default function BranchHomePage() {
                 </button>
             </div>
 
-            {/* ===== Settings Section ===== */}
             {showSettings && (
                 <section style={{ marginBottom: 'var(--space-7)' }}>
                     <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 var(--space-4) 0' }}>Account Settings</h2>
 
-                    {/* Nickname */}
                     <div style={cardStyle}>
                         <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 var(--space-3) 0' }}>Display Name</h3>
                         <label style={labelStyle}>Nickname</label>
@@ -244,7 +235,6 @@ export default function BranchHomePage() {
                         </div>
                     </div>
 
-                    {/* Password */}
                     <div style={cardStyle}>
                         <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 var(--space-3) 0' }}>Change Password</h3>
                         <div style={{ marginBottom: 'var(--space-3)' }}>
@@ -270,7 +260,6 @@ export default function BranchHomePage() {
                         <button onClick={handlePasswordChange} style={btnStyle}>Update Password</button>
                     </div>
 
-                    {/* Theme */}
                     <div style={cardStyle}>
                         <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 var(--space-3) 0' }}>Theme</h3>
                         <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: '0 0 var(--space-3) 0' }}>
@@ -304,7 +293,6 @@ export default function BranchHomePage() {
                         </div>
                     </div>
 
-                    {/* Messages */}
                     {settingsMsg.text && (
                         <p style={{
                             padding: '10px 14px',
@@ -320,7 +308,6 @@ export default function BranchHomePage() {
                 </section>
             )}
 
-            {/* Order Logs Body */}
             <section className={`slide-up slide-up-d2 ${styles.logsSection}`} style={{ padding: 0 }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 var(--space-4) 0' }}>Recent Orders</h2>
 
@@ -342,7 +329,6 @@ export default function BranchHomePage() {
                 )}
             </section>
 
-            {/* Floating Trash Bin Button */}
             <button
                 className={`slide-up slide-up-d3 ${styles.trashBinBtn}`}
                 onClick={() => setIsTrashOpen(true)}
@@ -352,7 +338,6 @@ export default function BranchHomePage() {
                 <TrashIcon size={20} />
             </button>
 
-            {/* Detail Modal */}
             {selectedLog && (
                 <OrderDetailModal
                     log={selectedLog}
@@ -360,7 +345,6 @@ export default function BranchHomePage() {
                 />
             )}
 
-            {/* Trash Bin Modal */}
             {isTrashOpen && (
                 <TrashBinModal
                     logs={deletedLogs}
