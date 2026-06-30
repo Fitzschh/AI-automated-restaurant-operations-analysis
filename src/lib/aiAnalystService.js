@@ -1,10 +1,38 @@
-import { auth } from './firebase';
+import { auth, fetchWithAppCheck, dbUrl } from './firebase';
 
 const CACHE_KEY_PREFIX = 'ai_analyst_cache_v2_';
 const CACHE_DURATION_MS = 30 * 60 * 1000;
+const AI_ANALYSIS_ENDPOINT = '/api/ai-analysis';
 
-function getCacheKey(branchId, mode) {
-  return `${CACHE_KEY_PREFIX}${branchId}_${mode}`;
+async function readResponsePayload(response) {
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { rawText: text };
+  }
+}
+
+function getResponseErrorMessage(response, payload) {
+  if (payload?.error || payload?.detail || payload?.message) {
+    return payload.error || payload.detail || payload.message;
+  }
+
+  if (response.status === 404) {
+    return 'AI analysis endpoint was not found. Confirm the FastAPI backend is running on port 5001.';
+  }
+
+  if (response.status === 405) {
+    return 'AI analysis endpoint rejected the request method. Confirm /api/ai-analysis is routed to the FastAPI backend.';
+  }
+
+  if (payload?.rawText) {
+    return payload.rawText.slice(0, 180);
+  }
+
+  return `AI analysis failed with status ${response.status}.`;
 }
 
 function normalizeAnalysisMode(mode) {
@@ -23,27 +51,34 @@ async function requestAnalysis(analyticsData, mode, branchId) {
     throw new Error('Please sign in again before generating AI analysis.');
   }
 
-  const response = await fetch('/api/ai-analysis', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ analyticsData, mode, branchId }),
-  });
-
-  if (!response.ok) {
-    let errorMessage = 'AI analysis failed. Please try again.';
-    try {
-      const data = await response.json();
-      if (data?.error) errorMessage = data.error;
-    } catch {
-      errorMessage = `AI analysis failed with status ${response.status}.`;
-    }
-    throw new Error(errorMessage);
+  let response;
+  try {
+    response = await fetch(AI_ANALYSIS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ analyticsData, mode, branchId }),
+    });
+  } catch (error) {
+    throw new Error('AI analysis service is unavailable. Please check your connection and try again.');
   }
 
-  return response.json();
+  const payload = await readResponsePayload(response);
+
+  if (response.ok) {
+    if (payload && !payload.rawText) {
+      return payload;
+    }
+    throw new Error('AI analysis service returned an invalid response.');
+  }
+
+  throw new Error(getResponseErrorMessage(response, payload));
+}
+
+function getCacheKey(branchId, mode) {
+  return `${CACHE_KEY_PREFIX}${branchId}_${mode}`;
 }
 
 function getCachedAnalysis(branchId, mode) {
@@ -66,14 +101,58 @@ function getCachedAnalysis(branchId, mode) {
   }
 }
 
-function cacheAnalysis(branchId, mode, analysis) {
+async function cacheAnalysis(branchId, mode, analysis) {
   try {
     const key = getCacheKey(branchId, mode);
     localStorage.setItem(key, JSON.stringify({
       timestamp: Date.now(),
       analysis,
     }));
-  } catch {
+    
+    // Also save to Firebase
+    if (mode === 'briefing') {
+       const dateObj = new Date(analysis.generatedAt || Date.now());
+       const dayStr = dateObj.toISOString().split('T')[0];
+       const url = dbUrl(`${branchId}/shiftHandoffs/${dayStr}`);
+       await fetchWithAppCheck(url, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(analysis)
+       });
+    } else if (mode === 'live') {
+       const dateObj = new Date(analysis.generatedAt || Date.now());
+       const dayStr = dateObj.toISOString().split('T')[0];
+       const hourStr = String(dateObj.getHours()).padStart(2, '0');
+       const url = dbUrl(`${branchId}/hourlyAnalyses/${dayStr}_${hourStr}`);
+       await fetchWithAppCheck(url, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(analysis)
+       });
+    }
+  } catch (err) {
+    console.warn('[LiveAnalyst] Failed to save analysis to Firebase', err);
+  }
+}
+
+export async function fetchAnalysisFromFirebase(branchId, mode, date = new Date()) {
+  try {
+    const dayStr = date.toISOString().split('T')[0];
+    let url;
+    if (mode === 'briefing') {
+      url = dbUrl(`${branchId}/shiftHandoffs/${dayStr}`);
+    } else if (mode === 'live') {
+      const hourStr = String(date.getHours()).padStart(2, '0');
+      url = dbUrl(`${branchId}/hourlyAnalyses/${dayStr}_${hourStr}`);
+    } else {
+      return null;
+    }
+    const res = await fetchWithAppCheck(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn('[LiveAnalyst] Failed to fetch from Firebase', err);
+    return null;
   }
 }
 
@@ -180,7 +259,7 @@ export async function generateAIAnalysis(analyticsData, branchId, forceRefresh =
   result.priorityActions.longTerm = result.priorityActions.longTerm || [];
 
   if (branchId) {
-    cacheAnalysis(branchId, analysisMode, result);
+    await cacheAnalysis(branchId, analysisMode, result);
   }
 
   return result;

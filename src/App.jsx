@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { useLiveAnalyst } from './context/LiveAnalystProvider';
 import LoginPage from './pages/LoginPage';
 import MenuPage from './pages/MenuPage';
 import AdminHomePage from './pages/AdminHomePage';
@@ -8,6 +9,11 @@ import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import AnalyticsHistoryPage from './pages/AnalyticsHistoryPage';
 import InventoryPage from './pages/InventoryPage';
 import AIUsagePage from './pages/AIUsagePage';
+import SupplierManagementPage from './pages/SupplierManagementPage';
+import AILiveNotificationBar from './components/analytics/AIFloatingChat';
+import AIChatHead from './components/analytics/AIChatHead';
+import ActionPlanToast from './components/analytics/ActionPlanToast';
+import HackathonDemoSimulation from './components/simulation/HackathonDemoSimulation';
 import { canAccessBranch, isUserAdmin } from './config/authConfig';
 
 function ProtectedRoute({ children, adminOnly = false, branchId: staticBranchId }) {
@@ -47,6 +53,31 @@ function ProtectedRoute({ children, adminOnly = false, branchId: staticBranchId 
   return children;
 }
 
+/**
+ * Session-level AI components rendered outside the Routes tree.
+ * They persist across all page navigations and are only destroyed on logout.
+ */
+function SessionAIComponents() {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  // Don't render on login page or when not authenticated
+  if (!isAuthenticated || location.pathname === '/') return null;
+
+  // Don't render on menu routes (menu pages handle their own UI)
+  const isMenuRoute = location.pathname.includes('/menu/') || location.pathname.includes('/menu-branch');
+  if (isMenuRoute) return null;
+
+  return (
+    <>
+      <AILiveNotificationBar />
+      <AIChatHead />
+      <ActionPlanToast />
+      <HackathonDemoSimulation />
+    </>
+  );
+}
+
 export default function App() {
   const location = useLocation();
 
@@ -59,6 +90,14 @@ export default function App() {
           element={
             <ProtectedRoute adminOnly>
               <AdminHomePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/suppliers"
+          element={
+            <ProtectedRoute adminOnly>
+              <SupplierManagementPage />
             </ProtectedRoute>
           }
         />
@@ -94,14 +133,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/menu-branch1"
-          element={
-            <ProtectedRoute branchId="branch1">
-              <MenuPage branchId="branch1" />
-            </ProtectedRoute>
-          }
-        />
+
         <Route
           path="/menu-branch2"
           element={
@@ -129,6 +161,9 @@ export default function App() {
         <Route path="/menu" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* Session-level AI: persists across all page navigation */}
+      <SessionAIComponents />
     </div>
   );
 }

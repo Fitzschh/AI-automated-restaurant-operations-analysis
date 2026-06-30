@@ -17,6 +17,18 @@
                 ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'fitzhofer@gmail.com')",
                 ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'fitzhofer@gmail.com')"
             }
+        },
+        "suppliers": {
+            ".read": "auth != null && auth.token.email === 'fitzhofer@gmail.com'",
+            ".write": "auth != null && auth.token.email === 'fitzhofer@gmail.com'"
+        },
+        "notifications": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.token.email === 'fitzhofer@gmail.com'"
+        },
+        "workflows": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.token.email === 'fitzhofer@gmail.com'"
         }
     }
 }

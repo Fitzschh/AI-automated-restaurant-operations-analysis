@@ -148,7 +148,7 @@ export default function LoginPage() {
           navigate(`/home/${branchId}`, { replace: true });
         } else {
           // Default fallback or error
-          navigate('/home/branch1', { replace: true });
+          navigate('/home/branch2', { replace: true });
         }
       }
     }

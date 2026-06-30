@@ -6,6 +6,7 @@ const { getDatabase, ServerValue } = require('firebase-admin/database');
 admin.initializeApp();
 
 const openAiApiKey = defineSecret('OPENAI_API_KEY');
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const PHP_PER_USD = 58;
 const GPT_4O_MINI_INPUT_USD_PER_TOKEN = 0.15 / 1_000_000;
 const GPT_4O_MINI_OUTPUT_USD_PER_TOKEN = 0.60 / 1_000_000;
@@ -298,7 +299,8 @@ Return ONLY valid JSON using this structure:
 ${schema}`;
 }
 
-function buildDataPrompt(analyticsData = {}, mode) {
+function buildDataPrompt(analyticsData, mode) {
+  const data = analyticsData || {};
   const {
     reportContext = {},
     summary = {},
@@ -312,62 +314,62 @@ function buildDataPrompt(analyticsData = {}, mode) {
     todayAnalytics = {},
     weekAnalytics = {},
     monthAnalytics = {},
-  } = analyticsData;
+  } = data;
 
-  const productEntries = Object.entries(products);
+  const productEntries = Object.entries(products || {});
   const productSummary = productEntries
-    .sort(([, a], [, b]) => (b.quantitySold || 0) - (a.quantitySold || 0))
-    .map(([id, data], i) => {
-      const name = formatProductName(data.name || id);
-      const avgPrice = data.orderCount > 0 ? money(Number(data.revenue || 0) / data.orderCount) : '0.00';
-      return `  ${i + 1}. ${name}: ${data.quantitySold || 0} units sold, ${data.orderCount || 0} orders, Revenue: ₱${money(data.revenue)}, Avg Price: ₱${avgPrice}`;
+    .sort(([, a], [, b]) => (b?.quantitySold || 0) - (a?.quantitySold || 0))
+    .map(([id, itemData], i) => {
+      const name = formatProductName(itemData?.name || id);
+      const avgPrice = itemData?.orderCount > 0 ? money(Number(itemData?.revenue || 0) / itemData.orderCount) : '0.00';
+      return `  ${i + 1}. ${name}: ${itemData?.quantitySold || 0} units sold, ${itemData?.orderCount || 0} orders, Revenue: ₱${money(itemData?.revenue)}, Avg Price: ₱${avgPrice}`;
     })
     .join('\n');
 
-  const inventorySummary = Object.entries(inventory)
+  const inventorySummary = Object.entries(inventory || {})
     .sort(([, a], [, b]) => {
-      const stockA = Number(a.stock ?? a.currentStock ?? 0);
-      const stockB = Number(b.stock ?? b.currentStock ?? 0);
+      const stockA = Number(a?.stock ?? a?.currentStock ?? 0);
+      const stockB = Number(b?.stock ?? b?.currentStock ?? 0);
       return stockA - stockB;
     })
     .slice(0, 30)
-    .map(([id, data]) => {
-      const product = products[id] || {};
-      const stock = Number(data.stock ?? data.currentStock ?? 0);
-      const warningLevel = Number(data.warningLevel ?? 10);
-      const criticalLevel = Number(data.criticalLevel ?? 5);
-      const quantitySold = Number(product.quantitySold || 0);
-      const orderCount = Number(product.orderCount || 0);
-      return `  ${formatProductName(data.productName || data.name || product.name || id)}: stock ${stock} ${data.unit || 'units'}, warning at ${warningLevel}, critical at ${criticalLevel}, sold ${quantitySold} units across ${orderCount} orders`;
+    .map(([id, itemData]) => {
+      const product = (products || {})[id] || {};
+      const stock = Number(itemData?.stock ?? itemData?.currentStock ?? 0);
+      const warningLevel = Number(itemData?.warningLevel ?? 10);
+      const criticalLevel = Number(itemData?.criticalLevel ?? 5);
+      const quantitySold = Number(product?.quantitySold || 0);
+      const orderCount = Number(product?.orderCount || 0);
+      return `  ${formatProductName(itemData?.productName || itemData?.name || product?.name || id)}: stock ${stock} ${itemData?.unit || 'units'}, warning at ${warningLevel}, critical at ${criticalLevel}, sold ${quantitySold} units across ${orderCount} orders`;
     })
     .join('\n');
 
-  const dailySummary = Object.entries(daily)
+  const dailySummary = Object.entries(daily || {})
     .sort(([a], [b]) => b.localeCompare(a))
     .slice(0, 14)
-    .map(([date, data]) => `  ${date}: ${data.orders || 0} orders, Revenue: ₱${money(data.revenue)}, AOV: ₱${money(data.averageOrderValue)}`)
+    .map(([date, itemData]) => `  ${date}: ${itemData?.orders || 0} orders, Revenue: ₱${money(itemData?.revenue)}, AOV: ₱${money(itemData?.averageOrderValue)}`)
     .join('\n');
 
-  const latestDay = Object.keys(daily).sort((a, b) => b.localeCompare(a))[0];
+  const latestDay = Object.keys(daily || {}).sort((a, b) => b.localeCompare(a))[0];
   let hourlySummary = 'No hourly data available.';
-  if (latestDay && hourly[latestDay]) {
-    const hourlyRows = Object.entries(hourly[latestDay])
+  if (latestDay && hourly && hourly[latestDay]) {
+    const hourlyRows = Object.entries(hourly[latestDay] || {})
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([hour, data]) => `  ${hour}:00 - ${data.orders || 0} orders, Revenue: ₱${money(data.revenue)}`)
+      .map(([hour, itemData]) => `  ${hour}:00 - ${itemData?.orders || 0} orders, Revenue: ₱${money(itemData?.revenue)}`)
       .join('\n');
     hourlySummary = `Hourly data for ${latestDay}:\n${hourlyRows}`;
   }
 
-  const weeklySummary = Object.entries(weekly)
+  const weeklySummary = Object.entries(weekly || {})
     .sort(([a], [b]) => b.localeCompare(a))
     .slice(0, 8)
-    .map(([week, data]) => `  ${week}: ${data.orders || 0} orders, Revenue: ₱${money(data.revenue)}`)
+    .map(([week, itemData]) => `  ${week}: ${itemData?.orders || 0} orders, Revenue: ₱${money(itemData?.revenue)}`)
     .join('\n');
 
-  const monthlySummary = Object.entries(monthly)
+  const monthlySummary = Object.entries(monthly || {})
     .sort(([a], [b]) => b.localeCompare(a))
     .slice(0, 6)
-    .map(([month, data]) => `  ${month}: ${data.orders || 0} orders, Revenue: ₱${money(data.revenue)}`)
+    .map(([month, itemData]) => `  ${month}: ${itemData?.orders || 0} orders, Revenue: ₱${money(itemData?.revenue)}`)
     .join('\n');
 
   const requestedMode = mode === 'deep'
@@ -387,35 +389,35 @@ function buildDataPrompt(analyticsData = {}, mode) {
   return `Here is the complete analytics data from our restaurant self-ordering system.
 
 Requested analysis mode: ${requestedMode}
-Report time: ${reportContext.asOfLabel || 'Current time'}
-Manager name: ${reportContext.managerNickname || 'Manager'}
-Branch: ${reportContext.branchLabel || 'Current branch'}
-Time of day label: ${reportContext.timeOfDayLabel || 'Current shift'}
-Manager question or scenario: ${reportContext.scenario || 'N/A'}
+Report time: ${reportContext?.asOfLabel || 'Current time'}
+Manager name: ${reportContext?.managerNickname || 'Manager'}
+Branch: ${reportContext?.branchLabel || 'Current branch'}
+Time of day label: ${reportContext?.timeOfDayLabel || 'Current shift'}
+Manager question or scenario: ${reportContext?.scenario || 'N/A'}
 
 === OVERALL SUMMARY ===
-Total Orders: ${summary.totalOrders || 0}
-Total Revenue: ₱${money(summary.totalRevenue)}
-Average Order Value: ₱${money(summary.averageOrderValue)}
-Best Selling Item: ${formatProductName(summary.bestSellingItem || 'N/A')}
-Least Selling Item: ${formatProductName(summary.leastSellingItem || 'N/A')}
-Last Updated: ${summary.lastUpdated || 'N/A'}
+Total Orders: ${summary?.totalOrders || 0}
+Total Revenue: ₱${money(summary?.totalRevenue)}
+Average Order Value: ₱${money(summary?.averageOrderValue)}
+Best Selling Item: ${formatProductName(summary?.bestSellingItem || 'N/A')}
+Least Selling Item: ${formatProductName(summary?.leastSellingItem || 'N/A')}
+Last Updated: ${summary?.lastUpdated || 'N/A'}
 
 === CURRENT PERIOD ===
-Today: ${todayAnalytics.orders || 0} orders, Revenue: ₱${money(todayAnalytics.revenue)}
-This Week: ${weekAnalytics.orders || 0} orders, Revenue: ₱${money(weekAnalytics.revenue)}
-This Month: ${monthAnalytics.orders || 0} orders, Revenue: ₱${money(monthAnalytics.revenue)}
+Today: ${todayAnalytics?.orders || 0} orders, Revenue: ₱${money(todayAnalytics?.revenue)}
+This Week: ${weekAnalytics?.orders || 0} orders, Revenue: ₱${money(weekAnalytics?.revenue)}
+This Month: ${monthAnalytics?.orders || 0} orders, Revenue: ₱${money(monthAnalytics?.revenue)}
 
 === AVERAGES ===
-Mean Daily Orders: ${statistics.ordersPerDay?.mean || 0}
-Median Daily Orders: ${statistics.ordersPerDay?.median || 0}
-Mean Daily Revenue: ₱${money(statistics.revenuePerDay?.mean)}
-Median Daily Revenue: ₱${money(statistics.revenuePerDay?.median)}
+Mean Daily Orders: ${statistics?.ordersPerDay?.mean || 0}
+Median Daily Orders: ${statistics?.ordersPerDay?.median || 0}
+Mean Daily Revenue: ₱${money(statistics?.revenuePerDay?.mean)}
+Median Daily Revenue: ₱${money(statistics?.revenuePerDay?.median)}
 
 === PRODUCTS (${productEntries.length} items) ===
 ${productSummary || 'No product data available.'}
 
-=== INVENTORY (${Object.keys(inventory).length} items) ===
+=== INVENTORY (${Object.keys(inventory || {}).length} items) ===
 ${inventorySummary || 'No inventory data available.'}
 
 === DAILY TRENDS (Last 14 days) ===
@@ -439,7 +441,19 @@ function parseModelJson(raw) {
     .replace(/```\n?/g, '')
     .trim();
 
-  return JSON.parse(cleaned);
+  if (!cleaned) {
+    const error = new Error('OpenAI returned an empty analysis response.');
+    error.code = 'EMPTY_MODEL_RESPONSE';
+    throw error;
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (parseError) {
+    parseError.code = 'MODEL_JSON_PARSE_FAILED';
+    parseError.preview = cleaned.slice(0, 500);
+    throw parseError;
+  }
 }
 
 async function verifyFirebaseUser(req) {
@@ -447,6 +461,66 @@ async function verifyFirebaseUser(req) {
   const match = authHeader.match(/^Bearer (.+)$/);
   if (!match) return null;
   return admin.auth().verifyIdToken(match[1]);
+}
+
+function readOpenAiApiKey() {
+  let secretValue = '';
+  try {
+    secretValue = openAiApiKey.value();
+  } catch (error) {
+    secretValue = '';
+  }
+
+  const apiKey = String(secretValue || process.env.OPENAI_API_KEY || '').trim();
+  if (!apiKey || apiKey === 'your_openai_api_key_here') {
+    return null;
+  }
+
+  return apiKey;
+}
+
+function readOpenAiModel() {
+  return String(process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
+}
+
+function validateAnalysisPayload(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return 'Request body must be a JSON object.';
+  }
+
+  if (!safeBranchId(body.branchId)) {
+    return 'A valid branch ID is required for AI analysis.';
+  }
+
+  if (!body.analyticsData || typeof body.analyticsData !== 'object' || Array.isArray(body.analyticsData)) {
+    return 'A valid analyticsData object is required for AI analysis.';
+  }
+
+  const reportContext = body.analyticsData.reportContext;
+  if (reportContext !== undefined && (typeof reportContext !== 'object' || Array.isArray(reportContext))) {
+    return 'analyticsData.reportContext must be an object when provided.';
+  }
+
+  return null;
+}
+
+async function readOpenAiError(response) {
+  const status = response.status;
+  const fallback = `OpenAI request failed with status ${status}.`;
+
+  try {
+    const text = await response.text();
+    if (!text) return fallback;
+
+    try {
+      const parsed = JSON.parse(text);
+      return parsed?.error?.message || parsed?.message || fallback;
+    } catch {
+      return text.slice(0, 500);
+    }
+  } catch {
+    return fallback;
+  }
 }
 
 exports.aiAnalysis = onRequest({ cors: true, secrets: [openAiApiKey] }, async (req, res) => {
@@ -467,50 +541,92 @@ exports.aiAnalysis = onRequest({ cors: true, secrets: [openAiApiKey] }, async (r
     return;
   }
 
+  const payloadError = validateAnalysisPayload(req.body);
+  if (payloadError) {
+    res.status(400).json({ error: payloadError });
+    return;
+  }
+
   const requestedMode = req.body?.mode;
   const mode = ['deep', 'live', 'briefing', 'leak', 'simulation', 'opschat'].includes(requestedMode)
     ? requestedMode
     : 'realtime';
   const branchId = safeBranchId(req.body?.branchId);
-  if (!branchId) {
-    res.status(400).json({ error: 'A valid branch ID is required for AI analysis.' });
-    return;
-  }
 
-  const apiKey = openAiApiKey.value();
+  const apiKey = readOpenAiApiKey();
+  const model = readOpenAiModel();
   if (!apiKey) {
     console.error('OPENAI_API_KEY is not configured on the server.');
-    res.status(500).json({ error: 'AI analysis is not configured. Set OPENAI_API_KEY on the server.' });
+    res.status(400).json({ error: 'AI analysis is not configured. Set OPENAI_API_KEY on the server.' });
     return;
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: buildSystemPrompt(mode) },
-          { role: 'user', content: buildDataPrompt(req.body?.analyticsData, mode) },
-        ],
-        response_format: { type: 'json_object' },
-        max_tokens: ['deep', 'briefing', 'leak', 'simulation', 'opschat'].includes(mode) ? 2600 : 350,
-        temperature: ['deep', 'briefing', 'leak', 'simulation', 'opschat'].includes(mode) ? 0.45 : 0.35,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`OpenAI API request failed with status ${response.status}.`);
-      res.status(502).json({ error: 'AI analysis service is temporarily unavailable.' });
+    let response;
+    try {
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: buildSystemPrompt(mode) },
+            { role: 'user', content: buildDataPrompt(req.body.analyticsData, mode) },
+          ],
+          response_format: { type: 'json_object' },
+          max_tokens: ['deep', 'briefing', 'leak', 'simulation', 'opschat'].includes(mode) ? 2600 : 350,
+          temperature: ['deep', 'briefing', 'leak', 'simulation', 'opschat'].includes(mode) ? 0.45 : 0.35,
+        }),
+      });
+    } catch (networkError) {
+      console.error('OpenAI API request could not be reached:', networkError.message);
+      res.status(502).json({ error: 'AI analysis service is temporarily unreachable. Please try again shortly.' });
       return;
     }
 
-    const data = await response.json();
-    const analysis = parseModelJson(data.choices?.[0]?.message?.content);
+    if (!response.ok) {
+      const upstreamMessage = await readOpenAiError(response);
+      console.error(`OpenAI API request failed with status ${response.status}: ${upstreamMessage}`);
+
+      if (response.status === 401 || response.status === 403) {
+        res.status(401).json({ error: 'AI analysis credentials are invalid. Check OPENAI_API_KEY on the server.' });
+        return;
+      }
+
+      if (response.status === 429) {
+        res.status(429).json({ error: 'AI analysis is temporarily rate limited. Please try again shortly.' });
+        return;
+      }
+
+      if (response.status === 404) {
+        res.status(502).json({ error: `AI analysis model was not found. Check OPENAI_MODEL on the server. Current model: ${model}.` });
+        return;
+      }
+
+      res.status(502).json({ error: 'AI analysis service is temporarily unavailable. Please try again shortly.' });
+      return;
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      console.error('OpenAI API returned invalid JSON:', jsonError.message);
+      res.status(502).json({ error: 'AI analysis service returned an invalid response.' });
+      return;
+    }
+
+    let analysis;
+    try {
+      analysis = parseModelJson(data.choices?.[0]?.message?.content);
+    } catch (parseError) {
+      console.error('OpenAI analysis response could not be parsed:', parseError.message, parseError.preview || '');
+      res.status(502).json({ error: 'AI analysis service returned an unreadable analysis response.' });
+      return;
+    }
 
     try {
       await recordAiUsage({ branchId, mode, usage: data.usage });

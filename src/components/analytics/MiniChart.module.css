@@ -1,135 +1,159 @@
+/* ===== MiniChart — Professional Visualization Styles ===== */
+
 .chartContainer {
   position: relative;
   width: 100%;
-  height: 100%;
+  overflow: visible;
 }
 
+/* ── Line Chart ─────────────────────────────────────────── */
+
 .linePath {
-  stroke-dasharray: 2000;
-  stroke-dashoffset: 2000;
-  animation: drawLine 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  vector-effect: non-scaling-stroke;
+  animation: drawLine 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes drawLine {
-  to {
-    stroke-dashoffset: 0;
-  }
+  from { stroke-dashoffset: 3000; }
+  to   { stroke-dashoffset: 0; }
 }
 
 .areaPath {
-  opacity: 0;
-  animation: fadeInArea 0.8s ease-out 0.5s forwards;
+  animation: fadeArea 0.9s ease-out forwards;
 }
 
-@keyframes fadeInArea {
-  to {
-    opacity: 0.15;
-  }
+@keyframes fadeArea {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
+
+.dataDot {
+  transition: opacity 0.15s ease, r 0.15s ease;
+}
+
+/* ── Bar Chart ─────────────────────────────────────────── */
 
 .barRect {
+  transition: opacity 0.15s ease;
+  animation: growBar 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   transform-origin: bottom;
-  transform: scaleY(0);
-  animation: growBar 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  transition: opacity 0.2s, fill 0.2s;
-}
-
-.barRect:hover {
-  opacity: 0.8;
 }
 
 @keyframes growBar {
-  to {
-    transform: scaleY(1);
-  }
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
 }
+
+/* ── Horizontal Bar ────────────────────────────────────── */
 
 .hBarRect {
-  transform-origin: left;
-  transform: scaleX(0);
-  animation: growHBar 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes growHBar {
-  to {
-    transform: scaleX(1);
-  }
-}
+/* ── Heatmap ───────────────────────────────────────────── */
 
 .heatmapRect {
+  animation: heatFade 0.4s ease forwards;
   opacity: 0;
-  animation: fadeIn 0.4s ease-out forwards;
-  transition: opacity 0.2s, transform 0.2s;
-  transform-origin: center;
 }
 
-.heatmapRect:hover {
-  transform: scale(0.9);
-  opacity: 1 !important;
+@keyframes heatFade {
+  to { opacity: 1; }
 }
 
-@keyframes fadeIn {
-  to {
-    opacity: 1;
-  }
-}
-
-.tooltip {
-  position: absolute;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
-  font-size: 0.75rem;
-  font-weight: 500;
-  pointer-events: none;
-  box-shadow: var(--shadow-md);
-  transform: translate(-50%, -100%);
-  margin-top: -8px;
-  z-index: 10;
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.chartContainer:hover .tooltip.visible {
-  opacity: 1;
-}
-
-.tooltipLabel {
-  color: var(--color-text-muted);
-  font-size: 0.65rem;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
+/* ── Axis Labels ───────────────────────────────────────── */
 
 .axisLabels {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 2px;
-  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 0 2px;
+}
+
+.axisLabel {
+  font-size: 0.65rem;
   color: var(--color-text-muted);
-  font-size: 0.66rem;
-  line-height: 1.1;
-}
-
-.axisLabels span {
-  min-width: 0;
-  text-align: center;
   white-space: nowrap;
-}
-
-.axisLabels span:first-child {
-  text-align: left;
-}
-
-.axisLabels span:last-child {
-  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+  text-align: center;
 }
 
 .axisLabelHidden {
   visibility: hidden;
+}
+
+/* ── Tooltip ───────────────────────────────────────────── */
+
+.tooltip {
+  position: absolute;
+  background: var(--color-bg-card, rgba(15, 25, 35, 0.96));
+  border: 1px solid var(--color-border, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  padding: 8px 12px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  transform: translateX(-50%);
+}
+
+.tooltip.visible {
+  opacity: 1;
+}
+
+.tooltipLabel {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.tooltipValue {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.tooltipDelta {
+  font-size: 0.72rem;
+  margin-top: 3px;
+}
+
+.deltaUp {
+  color: var(--color-success, #2ecc71);
+}
+
+.deltaDown {
+  color: var(--color-danger, #e74c3c);
+}
+
+/* ── Legend ────────────────────────────────────────────── */
+
+.chartLegend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }

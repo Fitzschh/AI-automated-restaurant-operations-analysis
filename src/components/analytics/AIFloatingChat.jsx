@@ -1,79 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { generateAIAnalysis, clearAnalysisCache } from '../../lib/aiAnalystService';
+import { useRef, useEffect } from 'react';
+import { useLiveAnalyst } from '../../context/LiveAnalystProvider';
 import { BotIcon } from './AnalyticsIcons';
 import styles from './AIFloatingChat.module.css';
 
-const DAILY_BRIEFING_DELAY_MS = 30 * 1000;
-const FIRST_LIVE_REPORT_DELAY_MS = 30 * 1000;
-const PREPARING_BRIEFING_MIN_MS = 5 * 1000;
-const DAILY_BRIEFING_CACHE_VERSION = 'v3';
-
-function formatAsOfLabel(date) {
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function getHourlyReportKey(branchId, date) {
-  const day = [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-  const hour = String(date.getHours()).padStart(2, '0');
-  return `ai_live_feed_${branchId}_${day}_${hour}`;
-}
-
-function getDailyBriefingKey(branchId, date = new Date()) {
-  const day = [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-  return `ai_daily_briefing_${DAILY_BRIEFING_CACHE_VERSION}_${branchId}_${day}`;
-}
-
-function getDailyBriefingSessionKey(branchId, date = new Date()) {
-  return `${getDailyBriefingKey(branchId, date)}_shown_this_session`;
-}
-
-function getTimeOfDayLabel(date = new Date()) {
-  const hour = date.getHours();
-
-  if (hour >= 5 && hour < 11) return 'Morning';
-  if (hour >= 11 && hour < 13) return 'Noon';
-  if (hour >= 13 && hour < 18) return 'Afternoon';
-  return 'Evening';
-}
-
-function formatBranchLabel(branchId) {
-  const match = String(branchId || '').match(/^branch(\d+)$/i);
-  if (match) return `Branch ${match[1]}`;
-  return String(branchId || 'this branch')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function createPreparingBriefing(managerNickname, branchLabel) {
-  const displayName = managerNickname?.trim() || 'Manager';
-  const timeOfDay = getTimeOfDayLabel();
-
-  return {
-    mode: 'briefing-preparing',
-    generatedAt: new Date().toISOString(),
-    greeting: `Good ${timeOfDay}, ${displayName}.`,
-    branchWelcome: `Welcome to ${branchLabel}.`,
-    message: 'I am preparing your AI Shift Handoff from the latest branch data.',
-  };
-}
-
-function clearStoredLiveFeedCache(branchId) {
-  try {
-    const prefix = `ai_live_feed_${branchId}_`;
-    Object.keys(localStorage)
-      .filter((key) => key.startsWith(prefix))
-      .forEach((key) => localStorage.removeItem(key));
-  } catch {
-  }
-}
+// ─── Analysis Message Renderers ─────────────────────────────────────────────
 
 function AnalysisMessages({ analysis }) {
   if (!analysis) return null;
@@ -146,7 +76,6 @@ function AnalysisMessages({ analysis }) {
             <p className={styles.confidenceLine}>Confidence {analysis.confidenceScore}%</p>
           )}
         </div>
-
         {analysis.generatedAt && (
           <div className={styles.messageTime}>
             {analysis.fromCache ? 'Cached handoff' : 'Fresh handoff'} — {new Date(analysis.generatedAt).toLocaleTimeString()}
@@ -261,7 +190,6 @@ function AnalysisMessages({ analysis }) {
             </p>
           )}
         </div>
-
         {analysis.generatedAt && (
           <div className={styles.messageTime}>
             {analysis.fromCache ? `Cached ${freshnessLabel}` : `Fresh ${freshnessLabel}`} — {new Date(analysis.generatedAt).toLocaleTimeString()}
@@ -294,7 +222,6 @@ function AnalysisMessages({ analysis }) {
             </p>
           )}
         </div>
-
         {analysis.generatedAt && (
           <div className={styles.messageTime}>
             {analysis.fromCache ? 'Cached insight' : 'Fresh insight'} — {new Date(analysis.generatedAt).toLocaleTimeString()}
@@ -304,45 +231,30 @@ function AnalysisMessages({ analysis }) {
     );
   }
 
+  // Generic sections fallback
   const sections = [];
 
   if (analysis.greeting) {
     sections.push({ title: null, content: analysis.greeting });
   }
-
   if (analysis.overallHealth) {
     sections.push({ title: 'Business Health', content: analysis.overallHealth });
   }
-
   if (analysis.topPerformers) {
     sections.push({ title: 'Top Performers', content: analysis.topPerformers });
   }
-
   if (analysis.concerns) {
     sections.push({ title: 'Watch Out For', content: analysis.concerns });
   }
-
   if (analysis.quickWins && analysis.quickWins.length > 0) {
-    sections.push({
-      title: 'Quick Actions',
-      list: analysis.quickWins,
-      bulletType: 'accent',
-    });
+    sections.push({ title: 'Quick Actions', list: analysis.quickWins, bulletType: 'accent' });
   }
-
   if (analysis.priorityActions) {
     const { urgent, recommended, longTerm } = analysis.priorityActions;
-    if (urgent && urgent.length > 0) {
-      sections.push({ title: 'Urgent', list: urgent, bulletType: 'high' });
-    }
-    if (recommended && recommended.length > 0) {
-      sections.push({ title: 'Recommended', list: recommended, bulletType: 'medium' });
-    }
-    if (longTerm && longTerm.length > 0) {
-      sections.push({ title: 'Long-term Ideas', list: longTerm, bulletType: 'low' });
-    }
+    if (urgent && urgent.length > 0) sections.push({ title: 'Urgent', list: urgent, bulletType: 'high' });
+    if (recommended && recommended.length > 0) sections.push({ title: 'Recommended', list: recommended, bulletType: 'medium' });
+    if (longTerm && longTerm.length > 0) sections.push({ title: 'Long-term Ideas', list: longTerm, bulletType: 'low' });
   }
-
   if (analysis.closingNote) {
     sections.push({ title: null, content: analysis.closingNote });
   }
@@ -381,7 +293,6 @@ function AnalysisMessages({ analysis }) {
           )}
         </div>
       ))}
-
       {analysis.generatedAt && (
         <div className={styles.messageTime}>
           {analysis.fromCache ? 'Cached analysis' : 'Fresh analysis'} — {new Date(analysis.generatedAt).toLocaleTimeString()}
@@ -391,316 +302,33 @@ function AnalysisMessages({ analysis }) {
   );
 }
 
-export default function AILiveNotificationBar({
-  analyticsData,
-  branchId,
-  managerNickname,
-  nicknameLoaded = true,
-  inventoryLoaded = true,
-}) {
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [feedItems, setFeedItems] = useState([]);
-  const [preparingBriefing, setPreparingBriefing] = useState(null);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState(null);
-  const [briefingComplete, setBriefingComplete] = useState(false);
+// ─── Main Component ─────────────────────────────────────────────────────────
+
+/**
+ * AILiveNotificationBar — Pure presentation component.
+ *
+ * ALL lifecycle management (timers, briefing logic, Firebase subscriptions)
+ * has been moved to LiveAnalystProvider. This component only reads from context
+ * and renders the notification panel.
+ */
+export default function AILiveNotificationBar() {
+  const {
+    latestAnalysis: analysis,
+    generating,
+    error,
+    notificationOpen,
+    hasData,
+    setNotificationOpen,
+  } = useLiveAnalyst();
+
   const bodyRef = useRef(null);
-  const analyticsSignatureRef = useRef('');
-  const generatingRef = useRef(false);
-  const liveReportInFlightRef = useRef(false);
-  const briefingInFlightRef = useRef(false);
-  const preparingBriefingTokenRef = useRef('');
-  const preparingBriefingVisibleUntilRef = useRef(0);
-  const notificationTimerRef = useRef(null);
-  const latestFeedItem = feedItems[feedItems.length - 1] || null;
-  const analysis = preparingBriefing || latestFeedItem;
-  const hasData = analyticsData?.summary?.totalOrders > 0;
   const panelVisible = notificationOpen;
-  const branchLabel = formatBranchLabel(branchId);
 
   useEffect(() => {
     if (bodyRef.current) {
       bodyRef.current.scrollTop = 0;
     }
-  }, [feedItems, generating, preparingBriefing]);
-
-  useEffect(() => () => {
-    if (notificationTimerRef.current) {
-      clearTimeout(notificationTimerRef.current);
-    }
-  }, []);
-
-  const showNotification = useCallback((durationMs = 15 * 1000) => {
-    setNotificationOpen(true);
-
-    if (notificationTimerRef.current) {
-      clearTimeout(notificationTimerRef.current);
-      notificationTimerRef.current = null;
-    }
-
-    if (durationMs === null) {
-      return;
-    }
-
-    notificationTimerRef.current = setTimeout(() => {
-      setNotificationOpen(false);
-      notificationTimerRef.current = null;
-    }, durationMs);
-  }, []);
-
-  const showPreparingBriefing = useCallback(() => {
-    const loginToken = sessionStorage.getItem('ai_daily_briefing_pending_at') || 'current-session';
-    if (preparingBriefingTokenRef.current === loginToken) return;
-
-    const now = Date.now();
-    preparingBriefingTokenRef.current = loginToken;
-    preparingBriefingVisibleUntilRef.current = now + PREPARING_BRIEFING_MIN_MS;
-    setError(null);
-    setPreparingBriefing(createPreparingBriefing(managerNickname, branchLabel));
-    showNotification(null);
-  }, [branchLabel, managerNickname, showNotification]);
-
-  const waitForPreparingBriefingMinimum = useCallback(async () => {
-    const visibleUntil = preparingBriefingVisibleUntilRef.current;
-    if (!visibleUntil) return;
-
-    const remaining = visibleUntil - Date.now();
-    if (remaining > 0) {
-      await new Promise((resolve) => setTimeout(resolve, remaining));
-    }
-  }, []);
-
-  const handleGenerate = useCallback(async (mode = 'realtime', forceRefresh = false, reportContext = null, revealNotification = true) => {
-    if (generatingRef.current) return null;
-    generatingRef.current = true;
-    setGenerating(true);
-    setError(null);
-
-    try {
-      if (forceRefresh) {
-        clearAnalysisCache(branchId, mode);
-      }
-      const payload = reportContext
-        ? { ...analyticsData, reportContext }
-        : analyticsData;
-      const result = await generateAIAnalysis(payload, branchId, forceRefresh, mode);
-      if (mode === 'briefing') {
-        await waitForPreparingBriefingMinimum();
-        setPreparingBriefing(null);
-      }
-      setFeedItems((items) => [
-        ...items.filter((item) => item.mode !== 'briefing-preparing'),
-        result,
-      ].slice(-12));
-      if (revealNotification) {
-        showNotification();
-      }
-      return result;
-    } catch (err) {
-      console.error('[AI Live Notifications] Generation failed:', err);
-      if (mode === 'briefing') {
-        await waitForPreparingBriefingMinimum();
-        setPreparingBriefing(null);
-      }
-      setError(err.message || 'Analysis failed. Please try again.');
-      if (mode === 'briefing') {
-        setFeedItems((items) => items.filter((item) => item.mode !== 'briefing-preparing'));
-      }
-      if (revealNotification) {
-        showNotification();
-      }
-    } finally {
-      generatingRef.current = false;
-      setGenerating(false);
-    }
-  }, [analyticsData, branchId, showNotification, waitForPreparingBriefingMinimum]);
-
-  const generateDailyBriefing = useCallback(async () => {
-    if (!branchId || !hasData || briefingInFlightRef.current) return;
-
-    const key = getDailyBriefingKey(branchId);
-    const sessionKey = getDailyBriefingSessionKey(branchId);
-    const pendingLoginBriefing = sessionStorage.getItem('ai_daily_briefing_pending') === '1';
-    const alreadyShown = sessionStorage.getItem(sessionKey) === '1';
-
-    if (!pendingLoginBriefing && alreadyShown) {
-      setBriefingComplete(true);
-      return;
-    }
-
-    const savedBriefing = pendingLoginBriefing ? null : sessionStorage.getItem(key);
-    if (savedBriefing) {
-      try {
-        const parsed = JSON.parse(savedBriefing);
-        if (parsed?.generatedAt) {
-          await waitForPreparingBriefingMinimum();
-          setPreparingBriefing(null);
-          setFeedItems((items) => [
-            ...items.filter((item) => (
-              item.mode !== 'briefing-preparing' &&
-              item.generatedAt !== parsed.generatedAt
-            )),
-            parsed,
-          ].slice(-12));
-          showNotification();
-          sessionStorage.setItem(sessionKey, '1');
-          sessionStorage.removeItem('ai_daily_briefing_pending');
-          sessionStorage.removeItem('ai_daily_briefing_pending_at');
-          setBriefingComplete(true);
-          return;
-        }
-      } catch {
-        sessionStorage.removeItem(key);
-      }
-    }
-
-    briefingInFlightRef.current = true;
-    try {
-      const result = await handleGenerate('briefing', true, {
-        asOfLabel: 'AI Shift Handoff',
-        branchLabel,
-        managerNickname: managerNickname?.trim() || 'Manager',
-        timeOfDayLabel: getTimeOfDayLabel(),
-        generatedFor: new Date().toISOString(),
-      });
-      if (result) {
-        sessionStorage.setItem(key, JSON.stringify(result));
-        sessionStorage.setItem(sessionKey, '1');
-        sessionStorage.removeItem('ai_daily_briefing_pending');
-        sessionStorage.removeItem('ai_daily_briefing_pending_at');
-      }
-    } finally {
-      briefingInFlightRef.current = false;
-      setBriefingComplete(true);
-    }
-  }, [branchId, branchLabel, handleGenerate, hasData, managerNickname, showNotification, waitForPreparingBriefingMinimum]);
-
-  const generateLiveReport = useCallback(async (date) => {
-    if (!branchId || !hasData || liveReportInFlightRef.current) return;
-
-    const hour = date.getHours();
-    if (hour < 7) return;
-
-    const key = getHourlyReportKey(branchId, date);
-    const savedReport = localStorage.getItem(key);
-    if (savedReport) {
-      try {
-        const parsed = JSON.parse(savedReport);
-        if (parsed?.generatedAt) {
-          setFeedItems((items) => (
-            items.some((item) => item.generatedAt === parsed.generatedAt)
-              ? items
-              : [...items, parsed].slice(-12)
-          ));
-          showNotification();
-          return;
-        }
-      } catch {
-        localStorage.removeItem(key);
-      }
-    }
-
-    liveReportInFlightRef.current = true;
-    try {
-      const result = await handleGenerate('live', true, {
-        asOfLabel: formatAsOfLabel(date),
-        scheduledHour: hour,
-        generatedFor: date.toISOString(),
-      });
-      if (result) {
-        localStorage.setItem(key, JSON.stringify(result));
-      }
-    } finally {
-      liveReportInFlightRef.current = false;
-    }
-  }, [branchId, handleGenerate, hasData, showNotification]);
-
-  const analyticsSignature = JSON.stringify({
-    summary: analyticsData?.summary || {},
-    products: analyticsData?.products || {},
-    daily: analyticsData?.daily || {},
-    hourly: analyticsData?.hourly || {},
-    weekly: analyticsData?.weekly || {},
-    monthly: analyticsData?.monthly || {},
-    inventory: analyticsData?.inventory || {},
-  });
-
-  useEffect(() => {
-    if (!branchId) return;
-
-    if (!analyticsSignatureRef.current) {
-      analyticsSignatureRef.current = analyticsSignature;
-      return;
-    }
-
-    if (analyticsSignatureRef.current === analyticsSignature) return;
-
-    analyticsSignatureRef.current = analyticsSignature;
-    clearAnalysisCache(branchId);
-    sessionStorage.removeItem(getDailyBriefingKey(branchId));
-    sessionStorage.removeItem(getDailyBriefingSessionKey(branchId));
-    clearStoredLiveFeedCache(branchId);
-
-    if (!notificationOpen || !hasData) {
-      setFeedItems([]);
-    }
-  }, [analyticsSignature, branchId, notificationOpen, hasData]);
-
-  useEffect(() => {
-    if (!branchId) return;
-
-    const pendingLoginBriefing = sessionStorage.getItem('ai_daily_briefing_pending') === '1';
-    const alreadyShown = sessionStorage.getItem(getDailyBriefingSessionKey(branchId)) === '1';
-    const shouldPrepareBriefing = pendingLoginBriefing || !alreadyShown;
-
-    if (shouldPrepareBriefing && !nicknameLoaded) {
-      return;
-    }
-
-    if (shouldPrepareBriefing) {
-      showPreparingBriefing();
-    }
-
-    if (!hasData || !inventoryLoaded) return;
-
-    if (!pendingLoginBriefing && alreadyShown) {
-      setBriefingComplete(true);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      generateDailyBriefing();
-    }, shouldPrepareBriefing ? PREPARING_BRIEFING_MIN_MS : DAILY_BRIEFING_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [branchId, generateDailyBriefing, hasData, inventoryLoaded, nicknameLoaded, showPreparingBriefing]);
-
-  useEffect(() => {
-    if (!branchId || !hasData || !briefingComplete) return;
-
-    let hourlyTimer = null;
-
-    function scheduleNextClockHourReport() {
-      const now = new Date();
-      const nextHour = new Date(now);
-      nextHour.setHours(now.getHours() + 1, 0, 0, 0);
-
-      hourlyTimer = setTimeout(async () => {
-        await generateLiveReport(new Date());
-        scheduleNextClockHourReport();
-      }, nextHour.getTime() - now.getTime());
-    }
-
-    const firstReportTimer = setTimeout(async () => {
-      await generateLiveReport(new Date());
-      scheduleNextClockHourReport();
-    }, FIRST_LIVE_REPORT_DELAY_MS);
-
-    return () => {
-      clearTimeout(firstReportTimer);
-      if (hourlyTimer) clearTimeout(hourlyTimer);
-    };
-  }, [branchId, briefingComplete, generateLiveReport, hasData]);
+  }, [analysis, generating]);
 
   return (
     <div aria-live="polite">
@@ -713,18 +341,18 @@ export default function AILiveNotificationBar({
             <p className={styles.panelName}>Live Operations AI</p>
             <p className={styles.panelStatus}>
               <span className={styles.statusDot} />
-              {analysis?.mode === 'briefing-preparing' ? 'Preparing shift handoff' : analysis?.mode === 'briefing' ? 'Shift handoff ready' : analysis?.mode === 'live' ? 'AI Live Operations Feed active' : 'Listening for operations changes'}
+              {analysis?.mode === 'briefing-preparing'
+                ? 'Preparing shift handoff'
+                : analysis?.mode === 'briefing'
+                ? 'Shift handoff ready'
+                : analysis?.mode === 'live'
+                ? 'AI Live Operations Feed active'
+                : 'Listening for operations changes'}
             </p>
           </div>
           <button
             className={styles.closeBtn}
-            onClick={() => {
-              setNotificationOpen(false);
-              if (notificationTimerRef.current) {
-                clearTimeout(notificationTimerRef.current);
-                notificationTimerRef.current = null;
-              }
-            }}
+            onClick={() => setNotificationOpen(false)}
             aria-label="Close"
           >
             ✕

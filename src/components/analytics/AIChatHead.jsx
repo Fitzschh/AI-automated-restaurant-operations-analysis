@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { generateAIAnalysis } from '../../lib/aiAnalystService';
+import { useLiveAnalyst } from '../../context/LiveAnalystProvider';
 import { BotIcon } from './AnalyticsIcons';
 import styles from './AIChatHead.module.css';
 
@@ -45,7 +46,8 @@ function isWorkRelatedQuestion(question, analyticsData) {
   return getKnownBusinessTerms(analyticsData).some((term) => normalized.includes(term));
 }
 
-export default function AIChatHead({ analyticsData, branchId }) {
+export default function AIChatHead() {
+  const { analyticsData, activeBranch: branchId } = useLiveAnalyst();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([

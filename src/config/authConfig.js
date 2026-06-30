@@ -6,8 +6,12 @@ export const AUTH_CONFIG = {
             name: 'Branch 1'
         },
         branch2: {
-            email: 'dummy@dummy.com',
+            email: 'doralyncascato3@gmail.com',
             name: 'Branch 2'
+        },
+        branch3: {
+            email: 'dummy@dummy.com',
+            name: 'Branch 3'
         }
     }
 };

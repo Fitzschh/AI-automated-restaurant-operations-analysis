@@ -286,7 +286,7 @@ export async function updateBackgroundImage(branchId, imageData) {
 }
 
 // Migration Utility
-export async function migrateDataToBranch1() {
+export async function migrateDataToBranch(targetBranchId) {
   try {
     // 1. Fetch root categories
     const catRes = await fetchWithAppCheck(baseDbUrl('categories'));
@@ -301,9 +301,9 @@ export async function migrateDataToBranch1() {
       return;
     }
 
-    // 3. Write to branch1
+    // 3. Write to target branch
     if (categories) {
-      await fetchWithAppCheck(baseDbUrl('branch1/categories'), {
+      await fetchWithAppCheck(baseDbUrl(`${targetBranchId}/categories`), {
         method: 'PUT',
         body: JSON.stringify(categories),
         headers: { 'Content-Type': 'application/json' },
@@ -311,17 +311,14 @@ export async function migrateDataToBranch1() {
     }
 
     if (appSettings) {
-      await fetchWithAppCheck(baseDbUrl('branch1/appSettings'), {
+      await fetchWithAppCheck(baseDbUrl(`${targetBranchId}/appSettings`), {
         method: 'PUT',
         body: JSON.stringify(appSettings),
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    console.log('Migration to branch1 completed successfully.');
-    // Optional: Delete root data after confirmation? user didn't explicitly ask to delete, but said "it should look like this...". 
-    // I will leave root data for safety for now, or I can delete it. 
-    // "Now the branch account only has an access to that specific branch" suggests we should probably clean up or just ignore root.
+    console.log(`Migration to ${targetBranchId} completed successfully.`);
   } catch (e) {
     console.error('Migration failed:', e);
     throw e;

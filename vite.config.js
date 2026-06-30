@@ -7,9 +7,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/ai-analysis': {
-        target: 'http://127.0.0.1:5001/device-streaming-ded679cd/us-central1/aiAnalysis',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
-        rewrite: () => '/',
       },
     },
   },

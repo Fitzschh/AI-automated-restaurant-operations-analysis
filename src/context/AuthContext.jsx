@@ -2,13 +2,15 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail, setPersistence, browserLocalPersistence, updatePassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { loadUserNickname, saveUserNickname } from '../lib/menuApi';
+import {
+  attachShiftHandoffUser,
+  beginShiftHandoffLoginSession,
+  clearShiftHandoffSession,
+} from '../lib/aiShiftHandoffSession';
 
 const AuthContext = createContext(null);
 
 const AUTH_KEY = 'e-menu-user';
-const AI_BRIEFING_PENDING_KEY = 'ai_daily_briefing_pending';
-const AI_BRIEFING_PENDING_AT_KEY = 'ai_daily_briefing_pending_at';
-const AI_AUTH_SESSION_UID_KEY = 'ai_auth_session_uid';
 
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
@@ -38,13 +40,7 @@ export function AuthProvider({ children }) {
           };
           setUser(userData);
           localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
-
-          const activeSessionUid = sessionStorage.getItem(AI_AUTH_SESSION_UID_KEY);
-          if (activeSessionUid !== firebaseUser.uid && sessionStorage.getItem(AI_BRIEFING_PENDING_KEY) !== '1') {
-            sessionStorage.setItem(AI_BRIEFING_PENDING_KEY, '1');
-            sessionStorage.setItem(AI_BRIEFING_PENDING_AT_KEY, String(Date.now()));
-          }
-          sessionStorage.setItem(AI_AUTH_SESSION_UID_KEY, firebaseUser.uid);
+          attachShiftHandoffUser(firebaseUser.uid);
 
           const userNickname = await loadUserNickname(firebaseUser.uid);
           setNickname(userNickname || '');
@@ -56,9 +52,7 @@ export function AuthProvider({ children }) {
           setNickname('');
           setNicknameLoaded(false);
           localStorage.removeItem(AUTH_KEY);
-          sessionStorage.removeItem(AI_AUTH_SESSION_UID_KEY);
-          sessionStorage.removeItem(AI_BRIEFING_PENDING_KEY);
-          sessionStorage.removeItem(AI_BRIEFING_PENDING_AT_KEY);
+          clearShiftHandoffSession();
           console.log("User not logged in");
         }
       } catch (err) {
@@ -75,14 +69,13 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     setLoading(true);
     setError(null);
-    sessionStorage.setItem(AI_BRIEFING_PENDING_KEY, '1');
-    sessionStorage.setItem(AI_BRIEFING_PENDING_AT_KEY, String(Date.now()));
+    beginShiftHandoffLoginSession();
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      attachShiftHandoffUser(credential.user?.uid);
       return true;
     } catch (err) {
-      sessionStorage.removeItem(AI_BRIEFING_PENDING_KEY);
-      sessionStorage.removeItem(AI_BRIEFING_PENDING_AT_KEY);
+      clearShiftHandoffSession();
       setError(err.message);
       return false;
     } finally {
@@ -105,9 +98,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     setLoading(true);
     try {
-      sessionStorage.removeItem(AI_AUTH_SESSION_UID_KEY);
-      sessionStorage.removeItem(AI_BRIEFING_PENDING_KEY);
-      sessionStorage.removeItem(AI_BRIEFING_PENDING_AT_KEY);
+      clearShiftHandoffSession();
       await signOut(auth);
     } catch (err) {
       setError(err.message);

@@ -73,3 +73,14 @@ functions/.secret.local
 
 # dataconnect generated files
 .dataconnect
+
+# MacOS
+.DS_Store
+
+# Python & Backend
+backend/__pycache__/
+backend/.pytest_cache/
+__pycache__/
+
+# Frontend build
+dist/

@@ -3,19 +3,34 @@ import { BarChart, HeatmapRow } from './MiniChart';
 import { ClockIcon, CalendarIcon } from './AnalyticsIcons';
 import styles from './AnalyticsSections.module.css';
 
+// ─── Date-Filling Utility ───────────────────────────────────────────────────
+
+function generateDateRange(startStr, endStr) {
+  const dates = [];
+  const start = new Date(`${startStr}T00:00:00`);
+  const end = new Date(`${endStr}T00:00:00`);
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().split('T')[0]);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
 function formatDateLabel(dateKey) {
   const date = new Date(`${dateKey}T00:00:00`);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// ─── Component ──────────────────────────────────────────────────────────────
+
 export default function OrderActivity({ hourlyData, dailyData }) {
   // Process hourly data
   const hourlyActivity = useMemo(() => {
-    // Array of 24 hours, default 0
     const hours = Array(24).fill(0);
     let peakHour = 0;
     let peakOrders = 0;
-    
+
     if (hourlyData && Object.keys(hourlyData).length > 0) {
       Object.entries(hourlyData).forEach(([hourStr, data]) => {
         const hour = parseInt(hourStr, 10);
@@ -32,7 +47,7 @@ export default function OrderActivity({ hourlyData, dailyData }) {
     return { hours, peakHour, peakOrders };
   }, [hourlyData]);
 
-  // Process daily order counts from the latest dates
+  // Process daily order counts — fill ALL dates in range
   const dailyActivity = useMemo(() => {
     const days = [];
     const dayLabels = [];
@@ -40,10 +55,18 @@ export default function OrderActivity({ hourlyData, dailyData }) {
     let peakOrders = 0;
 
     if (dailyData && Object.keys(dailyData).length > 0) {
-      const sortedDates = Object.keys(dailyData).sort().slice(-30);
-      
-      sortedDates.forEach((dateStr) => {
-        const orders = dailyData[dateStr].orders || 0;
+      const sortedDates = Object.keys(dailyData).sort();
+      const endDate = sortedDates[sortedDates.length - 1];
+      const endDateObj = new Date(`${endDate}T00:00:00`);
+      const startDateObj = new Date(endDateObj);
+      startDateObj.setDate(startDateObj.getDate() - 29); // Last 30 days
+      const startDate = startDateObj.toISOString().split('T')[0];
+
+      // Fill all dates in range — no gaps
+      const allDates = generateDateRange(startDate, endDate);
+
+      allDates.forEach((dateStr) => {
+        const orders = dailyData[dateStr]?.orders || 0;
         const label = formatDateLabel(dateStr);
         days.push(orders);
         dayLabels.push(label);
@@ -79,7 +102,7 @@ export default function OrderActivity({ hourlyData, dailyData }) {
             <h3 className={styles.panelTitle}>Orders by Hour (Today)</h3>
             <ClockIcon size={16} color="var(--color-text-muted)" />
           </div>
-          
+
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginBottom: 'var(--space-3)' }}>
             <HeatmapRow data={hourlyActivity.hours} colorBase="22, 160, 133" height={40} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
@@ -95,27 +118,27 @@ export default function OrderActivity({ hourlyData, dailyData }) {
             <div className={styles.statItem} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className={styles.statLabel}>Peak Hour Today</span>
               <span className={styles.statValue}>
-                {hourlyActivity.peakOrders > 0 
-                  ? `${formatHour(hourlyActivity.peakHour)} (${hourlyActivity.peakOrders} orders)` 
+                {hourlyActivity.peakOrders > 0
+                  ? `${formatHour(hourlyActivity.peakHour)} (${hourlyActivity.peakOrders} orders)`
                   : 'No orders yet'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Day of Week Panel */}
+        {/* Daily Bar Chart Panel */}
         <div className={styles.panel}>
           <div className={styles.panelHeader}>
             <h3 className={styles.panelTitle}>Orders by Date (Last 30 Days)</h3>
             <CalendarIcon size={16} color="var(--color-text-muted)" />
           </div>
-          
-          <div className={styles.chartContainer} style={{ minHeight: '120px' }}>
-            <BarChart 
-              data={dailyActivity.days} 
+
+          <div className={styles.chartContainer} style={{ minHeight: '140px' }}>
+            <BarChart
+              data={dailyActivity.days}
               labels={dailyActivity.dayLabels}
-              color="#3498db" 
-              height={120} 
+              color="#3498db"
+              height={140}
             />
           </div>
 
@@ -123,7 +146,7 @@ export default function OrderActivity({ hourlyData, dailyData }) {
             <div className={styles.statItem} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className={styles.statLabel}>Busiest Day</span>
               <span className={styles.statValue}>
-                {dailyActivity.peakOrders > 0 
+                {dailyActivity.peakOrders > 0
                   ? dailyActivity.peakLabel
                   : 'No data'}
               </span>
